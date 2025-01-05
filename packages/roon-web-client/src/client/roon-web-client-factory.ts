@@ -1,4 +1,6 @@
 import {
+  AISearchResponse,
+  AITrackStoryResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -22,6 +24,8 @@ import {
   RoonWebClientFactory,
   SharedConfig,
   SharedConfigListener,
+  SuggestedTrack,
+  TrackStory,
   ZoneState,
   ZoneStateListener,
 } from "@model";
@@ -151,6 +155,81 @@ class InternalRoonWebClient implements RoonWebClient {
       return;
     }
     throw new Error("unable to unregister client");
+  };
+
+  getAISearch: (query: string) => Promise<AISearchResponse> = async (query: string): Promise<AISearchResponse> => {
+    //For this to work, the server must have the /aisearch endpoint
+    const clientPath = this.ensureStared();
+    const commandUrl = new URL(`${clientPath}/aisearch`, this._apiHost);
+    const req = new Request(commandUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(query),
+    });
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      const tracks = (await response.json()) as SuggestedTrack[];
+      return { items: tracks };
+    }
+    throw new Error("unable to send command");
+  };
+
+  getTrackStory: (track: SuggestedTrack) => Promise<AITrackStoryResponse> = async (
+    track: SuggestedTrack
+  ): Promise<AITrackStoryResponse> => {
+    const clientPath = this.ensureStared();
+    const commandUrl = new URL(`${clientPath}/trackstory`, this._apiHost);
+    // eslint-disable-next-line no-console
+    console.log("Going to get track info", track);
+
+    const req = new Request(commandUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(track),
+    });
+
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      const trackStory = (await response.json()) as TrackStory;
+      return { story: trackStory };
+    }
+
+    throw new Error("Unable to fetch track story");
+  };
+
+  playTracks: (zoneId: string, tracks: SuggestedTrack[]) => Promise<AISearchResponse> = async (
+    zoneId: string,
+    tracks: SuggestedTrack[]
+  ) => {
+    // For this to work, the server must have the /play-tracks endpoint
+    const clientPath = this.ensureStared();
+    const commandUrl = new URL(`${clientPath}/play-tracks`, this._apiHost);
+    // Create the request payload
+    const payload = {
+      zoneId,
+      tracks,
+    };
+    const req = new Request(commandUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      const tracks = (await response.json()) as SuggestedTrack[];
+      return { items: tracks };
+    }
+    throw new Error("unable to send command");
   };
 
   onRoonState: (listener: RoonStateListener) => void = (listener: RoonStateListener) => {

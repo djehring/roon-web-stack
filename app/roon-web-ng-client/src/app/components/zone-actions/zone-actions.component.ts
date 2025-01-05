@@ -3,12 +3,15 @@ import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatDialogConfig } from "@angular/material/dialog";
 import { MatIcon } from "@angular/material/icon";
 import { FullScreenToggleComponent } from "@components/full-screen-toggle/full-screen-toggle.component";
+import { RoonAISearchDialogComponent } from "@components/roon-aisearch-dialog/roon-aisearch-dialog.component";
 import { RoonBrowseDialogComponent } from "@components/roon-browse-dialog/roon-browse-dialog.component";
 import { SettingsDialogComponent } from "@components/settings-dialog/settings-dialog.component";
+import { TrackStoryDialogComponent } from "@components/track-story-dialog/track-story-dialog.component";
 import { ZoneQueueDialogComponent } from "@components/zone-queue-dialog/zone-queue-dialog.component";
 import {
   Action,
   ActionType,
+  AISearchAction,
   CustomAction,
   DisplayMode,
   LayoutContext,
@@ -64,6 +67,12 @@ export class ZoneActionsComponent {
       case ActionType.LOAD:
         this.openBrowseDialog(action);
         break;
+      case ActionType.AI_SEARCH:
+        this.openAISearchDialog(action);
+        break;
+      case ActionType.AI_TRACK_STORY:
+        this.openAITrackStoryDialog();
+        break;
       case ActionType.QUEUE:
         this.toggleDisplayQueueTrack();
         break;
@@ -95,11 +104,36 @@ export class ZoneActionsComponent {
     this._dialogService.open(RoonBrowseDialogComponent, config);
   }
 
+  private openAISearchDialog(action: AISearchAction) {
+    const config: MatDialogConfig = {
+      restoreFocus: false,
+      data: {
+        isRecording: false,
+      },
+      autoFocus: action.id === "library-action" ? "input:first-of-type" : "button.roon-list-item:first-of-type",
+      height: "90svh",
+      maxHeight: "90svh",
+      width: "90svw",
+      maxWidth: "90svw",
+    };
+    if (this._$isOneColumn()) {
+      config.height = "95svh";
+      config.maxHeight = "95svh";
+      config.width = "95svw";
+      config.maxWidth = "95svw";
+    }
+    this._dialogService.open(RoonAISearchDialogComponent, config);
+  }
+
   openSettingsDialog() {
     const config = this._settingsService.isBigFonts()() ? SettingsDialogConfigBigFonts : SettingsDialogConfig;
     this._dialogService.open(SettingsDialogComponent, {
       ...config,
     });
+  }
+
+  openTrackStoryDialog() {
+    this.openAITrackStoryDialog();
   }
 
   private toggleDisplayQueueTrack() {
@@ -153,5 +187,22 @@ export class ZoneActionsComponent {
         }
       });
     }
+  }
+
+  private openAITrackStoryDialog() {
+    const config: MatDialogConfig = {
+      restoreFocus: false,
+      height: "90svh",
+      maxHeight: "90svh",
+      width: "90svw",
+      maxWidth: "90svw",
+    };
+    if (this._$isOneColumn()) {
+      config.height = "95svh";
+      config.maxHeight = "95svh";
+      config.width = "95svw";
+      config.maxWidth = "95svw";
+    }
+    this._dialogService.open(TrackStoryDialogComponent, config);
   }
 }

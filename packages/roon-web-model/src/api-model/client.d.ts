@@ -13,6 +13,7 @@ export interface Client {
   command: (command: Command) => string;
   browse: (options: RoonApiBrowseOptions) => Promise<RoonApiBrowseResponse>;
   load: (options: RoonApiBrowseLoadOptions) => Promise<RoonApiBrowseLoadResponse>;
+  playTracks: (zoneId: string, tracks: Track[]) => Promise<Track[]>;
 }
 
 export interface ClientManager {

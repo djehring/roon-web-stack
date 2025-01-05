@@ -1,4 +1,6 @@
 import {
+  AISearchResponse,
+  AITrackStoryResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -13,6 +15,7 @@ import {
   RoonApiBrowseResponse,
   RoonPath,
   SharedConfig,
+  SuggestedTrack,
   ZoneState,
 } from "@model";
 
@@ -65,6 +68,10 @@ export interface BrowseWorkerApiRequest extends WorkerApiRequest<ClientRoonApiBr
   type: "browse";
 }
 
+export interface PlayTracksWorkerApiRequest extends WorkerApiRequest<{ zoneId: string; tracks: SuggestedTrack[] }> {
+  type: "play-tracks";
+}
+
 export interface LoadWorkerApiRequest extends WorkerApiRequest<ClientRoonApiBrowseLoadOptions> {
   type: "load";
 }
@@ -95,6 +102,14 @@ export interface FindItemIndexWorkerApiRequest extends WorkerApiRequest<{ itemIn
   type: "find-item-index";
 }
 
+export interface AISearchWorkerApiRequest extends WorkerApiRequest<{ query: string }> {
+  type: "ai-search";
+}
+
+export interface TrackStoryWorkerApiRequest extends WorkerApiRequest<{ track: SuggestedTrack }> {
+  type: "track-story";
+}
+
 export type RawWorkerApiRequest =
   | BrowseWorkerApiRequest
   | LoadWorkerApiRequest
@@ -103,7 +118,10 @@ export type RawWorkerApiRequest =
   | LoadPathWorkerApiRequest
   | PreviousWorkerApiRequest
   | NavigateWorkerApiRequest
-  | FindItemIndexWorkerApiRequest;
+  | FindItemIndexWorkerApiRequest
+  | AISearchWorkerApiRequest
+  | PlayTracksWorkerApiRequest
+  | TrackStoryWorkerApiRequest;
 
 export interface WorkerApiRequestMessage extends WorkerMessage<RawWorkerApiRequest> {
   event: "worker-api";
@@ -174,18 +192,41 @@ export interface FoundItemIndexApiResult extends ApiResult<FoundItemIndexRespons
   type: "found-item-index";
 }
 
+export interface AISearchApiResult extends ApiResult<AISearchResponse> {
+  type: "ai-search";
+}
+
+export interface PlayTracksApiResult extends ApiResult<AISearchResponse> {
+  type: "play-tracks";
+}
+
+export interface TrackStoryApiResult extends ApiResult<AITrackStoryResponse> {
+  type: "track-story";
+}
+
 export type RawApiResult =
   | BrowseApiResult
   | LoadApiResult
   | CommandApiResult
   | VersionApiResult
-  | FoundItemIndexApiResult;
+  | FoundItemIndexApiResult
+  | AISearchApiResult
+  | PlayTracksApiResult
+  | TrackStoryApiResult;
 
 export interface ApiResultWorkerEvent extends WorkerEvent<RawApiResult> {
   event: "apiResult";
 }
 
-export interface ApiResultCallback<U extends RoonApiBrowseResponse | RoonApiBrowseLoadResponse | string | number> {
+export interface ApiResultCallback<
+  U extends
+    | string
+    | number
+    | RoonApiBrowseResponse
+    | RoonApiBrowseLoadResponse
+    | AISearchResponse
+    | AITrackStoryResponse,
+> {
   next: (u: U) => void;
   error?: (error: unknown) => void;
 }

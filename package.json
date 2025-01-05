@@ -1,6 +1,6 @@
 {
   "name": "@nihilux/roon-web-stack",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "a web stack, from api to web client, to use roon ia a browser",
   "private": true,
   "author": "nihil@nihilux.org",
@@ -18,12 +18,18 @@
   },
   "scripts": {
     "build": "yarn workspaces foreach -At run build",
+    "clean": "yarn workspaces foreach -At run clean",
     "lint": "yarn workspaces foreach -At run lint",
     "lint:fix": "yarn workspaces foreach -At run lint:fix",
     "test": "yarn workspaces foreach -At run test",
     "backend": "yarn workspace @nihilux/roon-web-api start",
+    "backend:prod": "yarn workspace @nihilux/roon-web-api start:prod",
     "frontend": "yarn workspace @nihilux/roon-web-ng-client start",
+    "frontend:prod": "yarn workspace @nihilux/roon-web-ng-client start:prod",
     "jest": "yarn workspaces foreach -At run jest"
+  },
+  "resolutions": {
+    "punycode": "^2.3.1"
   },
   "packageManager": "yarn@4.5.3+sha512.3003a14012e2987072d244c720506549c1aab73ee728208f1b2580a9fd67b92d61ba6b08fe93f6dce68fd771e3af1e59a0afa28dd242dd0940d73b95fedd4e90"
 }

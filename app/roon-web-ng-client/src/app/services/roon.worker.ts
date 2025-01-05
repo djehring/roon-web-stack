@@ -1,8 +1,7 @@
-/// <reference lib="webworker" />
-
 import { defer, retry } from "rxjs";
 import { RoonWebClient, SharedConfigMessage } from "@model";
 import {
+  AISearchApiResult,
   ApiResultWorkerEvent,
   ApiStateWorkerEvent,
   BrowseApiResult,
@@ -11,9 +10,11 @@ import {
   CommandStateWorkerEvent,
   FoundItemIndexApiResult,
   LoadApiResult,
+  PlayTracksApiResult,
   QueueStateWorkerEvent,
   RawApiResult,
   RawWorkerApiRequest,
+  TrackStoryApiResult,
   WorkerActionMessage,
   WorkerClientAction,
   ZoneStateWorkerEvent,
@@ -335,6 +336,74 @@ const onApiRequest = (apiRequest: RawWorkerApiRequest): void => {
           postApiResult(message);
         });
       break;
+    case "ai-search": {
+      void _roonClient
+        .getAISearch(apiRequest.data.query)
+        .then((data) => {
+          // Create and send the success message
+          const message: AISearchApiResult = {
+            type: "ai-search",
+            id,
+            data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          // Create and send the error message
+          const message: AISearchApiResult = {
+            type: "ai-search",
+            id,
+            error,
+          };
+          postApiResult(message);
+        });
+      break;
+    }
+    case "track-story": {
+      void _roonClient
+        .getTrackStory(apiRequest.data.track)
+        .then((data) => {
+          // Create and send the success message
+          const message: TrackStoryApiResult = {
+            type: "track-story",
+            id,
+            data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          const message: AISearchApiResult = {
+            type: "ai-search",
+            id,
+            error,
+          };
+          postApiResult(message);
+        });
+      break;
+    }
+    case `play-tracks`: {
+      void _roonClient
+        .playTracks(apiRequest.data.zoneId, apiRequest.data.tracks)
+        .then((data) => {
+          // Create and send the success message
+          const message: PlayTracksApiResult = {
+            type: "play-tracks",
+            id,
+            data: data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          // Create and send the error message
+          const message: PlayTracksApiResult = {
+            type: "play-tracks",
+            id,
+            error,
+          };
+          postApiResult(message);
+        });
+      break;
+    }
   }
 };
 

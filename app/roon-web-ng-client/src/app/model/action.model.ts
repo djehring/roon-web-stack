@@ -1,10 +1,28 @@
 import { MatDialogConfig } from "@angular/material/dialog";
-import { RoonApiBrowseHierarchy, RoonPath } from "@model";
+import { RoonApiBrowseHierarchy, RoonPath, SuggestedTrack } from "@model";
+
+// app/roon-web-ng-client/src/app/model/action.model.ts
 
 export enum ActionType {
   LOAD = "LOAD",
   QUEUE = "QUEUE",
   CUSTOM = "CUSTOM",
+  AI_SEARCH = "AI_SEARCH",
+  AI_TRACK_STORY = "AI_TRACK_STORY",
+}
+
+export interface AISearchAction {
+  id: string;
+  button: ActionButton;
+  type: ActionType.AI_SEARCH;
+  query: string;
+}
+
+export interface AITrackStoryAction {
+  id: string;
+  button: ActionButton;
+  type: ActionType.AI_TRACK_STORY;
+  track: SuggestedTrack;
 }
 
 export interface ActionButton {
@@ -42,7 +60,7 @@ export interface RecordedAction {
   actionIndex: number;
 }
 
-export type Action = LoadAction | QueueAction | CustomAction;
+export type Action = LoadAction | QueueAction | CustomAction | AISearchAction | AITrackStoryAction; // Update the union type
 
 export interface LoadAction {
   button: ActionButton;
@@ -74,6 +92,16 @@ export const ArtistsAction: LoadAction = {
   button: {
     label: "Artists",
     icon: "artist",
+  },
+};
+
+export const AISearchAction: AISearchAction = {
+  id: "ai-search-action",
+  type: ActionType.AI_SEARCH,
+  query: "search query",
+  button: {
+    label: "AI Search",
+    icon: "search",
   },
 };
 
@@ -170,8 +198,22 @@ export const ToggleQueueAction: QueueAction = {
   type: ActionType.QUEUE,
 };
 
+export const AITrackStoryAction: AITrackStoryAction = {
+  id: "ai-track-story-action",
+  type: ActionType.AI_TRACK_STORY,
+  button: {
+    label: "Track Story",
+    icon: "info",
+  },
+  track: {
+    artist: "",
+    track: "",
+  },
+};
+
 export const DefaultActions: Action[] = [
   AlbumsAction,
+  AISearchAction,
   ArtistsAction,
   BrowseAction,
   ComposersAction,

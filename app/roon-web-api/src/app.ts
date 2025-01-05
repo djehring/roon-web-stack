@@ -1,9 +1,16 @@
+import * as dotenv from "dotenv";
 import { fastify } from "fastify";
 import * as process from "process";
 import { buildLoggerOptions, hostInfo } from "@infrastructure";
 import { clientManager, gracefulShutdownHook } from "@service";
 import apiRoute from "./route/api-route";
 import appRoute from "./route/app-route";
+
+// Load environment variables and handle errors
+const result = dotenv.config();
+if (result.error) {
+  process.exit(1);
+}
 
 const init = async (): Promise<void> => {
   const server = fastify({

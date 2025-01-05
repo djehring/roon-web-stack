@@ -9,9 +9,22 @@ import {
   RoonApiBrowseResponse,
 } from "../roon-kit";
 
+export interface SuggestedTrack {
+  artist: string;
+  track: string;
+}
+
+export interface TrackStory {
+  title: string;
+  content: string;
+}
+
 export interface RoonWebClient {
   start: (roonClientId?: string) => Promise<void>;
   stop: () => Promise<void>;
+  getAISearch: (query: string) => Promise<AISearchResponse>;
+  getTrackStory: (track: SuggestedTrack) => Promise<AITrackStoryResponse>;
+  playTracks: (zoneId: string, tracks: SuggestedTrack[]) => Promise<AISearchResponse>;
   restart: () => Promise<void>;
   refresh: () => Promise<void>;
   onRoonState: (listener: RoonStateListener) => void;
@@ -70,4 +83,12 @@ export interface ItemIndexSearch {
 
 export interface FoundItemIndexResponse extends RoonApiBrowseLoadResponse {
   itemIndex: number;
+}
+
+export interface AISearchResponse {
+  items: SuggestedTrack[];
+}
+
+export interface AITrackStoryResponse {
+  story: TrackStory;
 }

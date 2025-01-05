@@ -8,3 +8,8 @@ config.json
 .pnp.*
 .yarn
 **/.nx
+.idea/workspace.xml
+.idea/webstorm.xml
+.idea/.gitignore
+.*
+.env

@@ -4,6 +4,8 @@ import { Observable } from "rxjs";
 import { DOCUMENT } from "@angular/common";
 import { computed, inject, Injectable, Signal, signal, WritableSignal } from "@angular/core";
 import {
+  AISearchResponse,
+  AITrackStoryResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -19,9 +21,11 @@ import {
   RoonPath,
   RoonState,
   SharedConfig,
+  SuggestedTrack,
   ZoneState,
 } from "@model";
 import {
+  AISearchApiResult,
   ApiResultCallback,
   BrowseApiResult,
   BrowseWorkerApiRequest,
@@ -35,10 +39,14 @@ import {
   LoadWorkerApiRequest,
   NavigateWorkerApiRequest,
   OutputCallback,
+  PlayTracksApiResult,
+  PlayTracksWorkerApiRequest,
   PreviousWorkerApiRequest,
   RawApiResult,
   RawWorkerApiRequest,
   RawWorkerEvent,
+  TrackStoryApiResult,
+  TrackStoryWorkerApiRequest,
   VersionApiResult,
   VersionWorkerApiRequest,
   VisibilityState,
@@ -74,6 +82,12 @@ export class RoonService {
   private readonly _apiBrowseCallbacks: Map<number, ApiResultCallback<RoonApiBrowseResponse>>;
   private readonly _apiLoadCallbacks: Map<number, ApiResultCallback<RoonApiBrowseLoadResponse>>;
   private readonly _apiFoundItemIndexCallbacks: Map<number, ApiResultCallback<FoundItemIndexResponse>>;
+  private readonly _apiAISearchCallbacks: Map<number, ApiResultCallback<AISearchResponse>>;
+  private readonly _apiPlayTracksCallbacks: Map<
+    number,
+    { resolve: (value: AISearchResponse) => void; reject: (reason: Error | string) => void }
+  >;
+  private readonly _apiTrackStoryCallbacks: Map<number, ApiResultCallback<AITrackStoryResponse>>;
   private _workerApiRequestId: number;
   private _isStarted: boolean;
   private _outputCallback?: OutputCallback;
@@ -115,6 +129,12 @@ export class RoonService {
     this._apiBrowseCallbacks = new Map<number, ApiResultCallback<RoonApiBrowseResponse>>();
     this._apiLoadCallbacks = new Map<number, ApiResultCallback<RoonApiBrowseLoadResponse>>();
     this._apiFoundItemIndexCallbacks = new Map<number, ApiResultCallback<FoundItemIndexResponse>>();
+    this._apiAISearchCallbacks = new Map<number, ApiResultCallback<AISearchResponse>>();
+    this._apiPlayTracksCallbacks = new Map<
+      number,
+      { resolve: (value: AISearchResponse) => void; reject: (reason: Error | string) => void }
+    >();
+    this._apiTrackStoryCallbacks = new Map<number, ApiResultCallback<AITrackStoryResponse>>();
     this._workerApiRequestId = 0;
     this._version = "unknown";
   }
@@ -411,6 +431,44 @@ export class RoonService {
     return this._$isGrouping;
   }
 
+  playTracks: (tracks: SuggestedTrack[]) => Promise<AISearchResponse> = (tracks) => {
+    const worker = this.ensureStarted(); // Ensure the worker is started
+    const id = this.nextWorkerApiRequestId(); // Generate a new request ID
+    const currentZoneId = this._settingsService.displayedZoneId()(); // Get the current zone ID
+
+    const apiRequest: PlayTracksWorkerApiRequest = {
+      id,
+      type: "play-tracks",
+      data: { zoneId: currentZoneId, tracks: tracks }, // Construct the API request payload
+    };
+
+    // Call the Promise-based buildPlayTracksResponsePromise method
+    return this.buildPlayTracksResponsePromise(worker, apiRequest);
+  };
+
+  aiSearch: (query: string) => Observable<AISearchResponse> = (query) => {
+    const worker = this.ensureStarted(); // Ensure the worker is started
+    const id = this.nextWorkerApiRequestId(); // Get the next request ID
+
+    const apiRequest: RawWorkerApiRequest = {
+      id,
+      type: "ai-search", // Specify the type of request
+      data: { query }, // Pass the query as data
+    };
+    return this.buildAISearchResponseObservable(worker, apiRequest);
+  };
+
+  aiGetTrackStory: (track: SuggestedTrack) => Observable<AITrackStoryResponse> = (track) => {
+    const worker = this.ensureStarted();
+    const id = this.nextWorkerApiRequestId();
+    const apiRequest: TrackStoryWorkerApiRequest = {
+      id,
+      type: "track-story",
+      data: { track },
+    };
+    return this.buildTrackStoryResponseResponseObservable(worker, apiRequest);
+  };
+
   private reconnect: () => void = () => {
     if (this._worker) {
       const message: WorkerClientActionMessage = {
@@ -561,6 +619,15 @@ export class RoonService {
       case "found-item-index":
         this.onNumberApiResult(apiResultEvent);
         break;
+      case "ai-search": // New hook for AI Search
+        this.onAISearchApiResult(apiResultEvent);
+        break;
+      case "play-tracks": // New hook for AI Search
+        this.onPlayTracksApiResult(apiResultEvent);
+        break;
+      case "track-story":
+        this.onTrackStoryApiResult(apiResultEvent);
+        break;
     }
   }
 
@@ -612,6 +679,48 @@ export class RoonService {
     }
   }
 
+  private onAISearchApiResult(apiResult: AISearchApiResult) {
+    const callback = this._apiAISearchCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.data) {
+        callback.next(apiResult.data); // Send the result to the callback
+      } else if (apiResult.error && callback.error) {
+        callback.error(apiResult.error); // Handle errors
+      }
+      this._apiStringCallbacks.delete(apiResult.id); // Cleanup the callback
+    }
+  }
+
+  private onPlayTracksApiResult(apiResult: PlayTracksApiResult) {
+    const handlers = this._apiPlayTracksCallbacks.get(apiResult.id);
+    if (handlers) {
+      if (apiResult.data) {
+        handlers.resolve(apiResult.data); // Resolve the promise
+      } else if (apiResult.error) {
+        const error =
+          apiResult.error instanceof Error
+            ? apiResult.error
+            : new Error(
+                typeof apiResult.error === "string" ? apiResult.error : JSON.stringify(apiResult.error, null, 2)
+              );
+        handlers.reject(error); // Reject the promise
+      }
+      this._apiPlayTracksCallbacks.delete(apiResult.id); // Cleanup
+    }
+  }
+
+  private onTrackStoryApiResult(apiResult: TrackStoryApiResult) {
+    const callback = this._apiTrackStoryCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.data) {
+        callback.next(apiResult.data);
+      } else if (callback.error) {
+        callback.error(apiResult.error || new Error("No data received"));
+      }
+      this._apiTrackStoryCallbacks.delete(apiResult.id);
+    }
+  }
+
   private buildLoadResponseObservable(worker: Worker, apiRequest: RawWorkerApiRequest) {
     return new Observable<RoonApiBrowseLoadResponse>((subscriber) => {
       const apiResultCallback: ApiResultCallback<RoonApiBrowseLoadResponse> = {
@@ -625,6 +734,73 @@ export class RoonService {
         },
       };
       this._apiLoadCallbacks.set(apiRequest.id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  }
+
+  private buildAISearchResponseObservable(worker: Worker, apiRequest: RawWorkerApiRequest) {
+    return new Observable<AISearchResponse>((subscriber) => {
+      const apiResultCallback: ApiResultCallback<AISearchResponse> = {
+        next: (response) => {
+          subscriber.next(response); // Emit the response
+          subscriber.complete(); // Mark observable as complete
+        },
+        error: (error) => {
+          subscriber.error(error); // Emit the error
+          subscriber.complete();
+        },
+      };
+      // Store the callback for response handling
+      this._apiAISearchCallbacks.set(apiRequest.id, apiResultCallback);
+      // Post the request to the worker
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  }
+
+  private buildPlayTracksResponsePromise(worker: Worker, apiRequest: RawWorkerApiRequest): Promise<AISearchResponse> {
+    return new Promise<AISearchResponse>((resolve, reject) => {
+      // Store the resolve and reject callbacks
+      this._apiPlayTracksCallbacks.set(apiRequest.id, {
+        resolve: (data: AISearchResponse) => {
+          // if tracks are returned they are missing so log them
+          if (data.items.length) {
+            // eslint-disable-next-line no-console
+            console.log("Missing tracks:", JSON.stringify(data.items, null, 2));
+          }
+          resolve(data);
+        },
+        reject: (error: unknown) => {
+          reject(error instanceof Error ? error : new Error(typeof error === "string" ? error : JSON.stringify(error)));
+        },
+      });
+
+      // Post the request to the worker
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  }
+
+  private buildTrackStoryResponseResponseObservable(worker: Worker, apiRequest: RawWorkerApiRequest) {
+    return new Observable<AITrackStoryResponse>((subscriber) => {
+      const apiResultCallback: ApiResultCallback<AITrackStoryResponse> = {
+        next: (response) => {
+          subscriber.next(response);
+          subscriber.complete();
+        },
+        error: (error) => {
+          subscriber.error(error);
+          subscriber.complete();
+        },
+      };
+      this._apiTrackStoryCallbacks.set(apiRequest.id, apiResultCallback);
       worker.postMessage({
         event: "worker-api",
         data: apiRequest,

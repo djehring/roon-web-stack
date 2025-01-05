@@ -15,6 +15,8 @@ import {
   RoonSseMessage,
 } from "@model";
 import { commandDispatcher } from "@service";
+import { Track } from "../ai-service/types/track";
+import { findTracksInRoon } from "./client-tracks-manager";
 
 class InternalClient implements Client {
   private static readonly PING_PERIOD = 45;
@@ -62,6 +64,15 @@ class InternalClient implements Client {
   load = async (options: RoonApiBrowseLoadOptions): Promise<RoonApiBrowseLoadResponse> => {
     options.multi_session_key = this.client_id;
     return roon.load(options);
+  };
+
+  playTracks = async (zoneId: string, tracks: Track[]): Promise<Track[]> => {
+    const browseOptions: RoonApiBrowseOptions = {
+      hierarchy: "browse",
+      zone_or_output_id: zoneId,
+      multi_session_key: this.client_id,
+    };
+    return await findTracksInRoon(tracks, browseOptions);
   };
 
   id = (): string => {

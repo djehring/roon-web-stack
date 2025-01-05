@@ -1,0 +1,18 @@
+<div class="track-story">
+  <ng-container *ngIf="$trackDisplay() as track">
+    <h2>{{ track.artist }} - {{ track.title }}</h2>
+    <ng-container *ngIf="(isLoading$ | async) === false; else loading">
+      <ng-container *ngIf="$story | async as story">
+        <h3>{{ story.title }}</h3>
+        <markdown [data]="story.content"></markdown>
+      </ng-container>
+    </ng-container>
+  </ng-container>
+  <ng-template #loading>
+    <mat-spinner></mat-spinner>
+  </ng-template>
+</div>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="closeDialog()">Close</button>
+</mat-dialog-actions> 

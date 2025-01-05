@@ -5,6 +5,7 @@
  New typings might be added to integrate missing part of the roon API in the future
  */
 import { OutputDescription } from "../api-model";
+import { SuggestedTrack } from "../client-model";
 
 export type EmptyObject = {
   [K in unknown]: never;
@@ -137,6 +138,10 @@ export interface RoonApiBrowseLoadResponse {
   items: Item[];
   offset: number;
   list: List;
+}
+
+export interface AISearchResponse {
+  items: SuggestedTrack[];
 }
 
 export interface RoonApiBrowse {

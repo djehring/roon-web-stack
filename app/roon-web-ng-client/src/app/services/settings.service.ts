@@ -16,6 +16,8 @@ import {
 } from "@angular/core";
 import {
   Action,
+  AISearchAction,
+  AITrackStoryAction,
   BrowseAction,
   ChosenTheme,
   ClientBreakpoints,
@@ -304,7 +306,7 @@ export class SettingsService implements OnDestroy {
       }
       return actions;
     } else {
-      return [ToggleQueueAction, BrowseAction, LibraryAction, RadiosAction];
+      return [ToggleQueueAction, BrowseAction, LibraryAction, RadiosAction, AISearchAction, AITrackStoryAction];
     }
   }
 

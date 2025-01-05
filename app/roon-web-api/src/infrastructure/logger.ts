@@ -26,6 +26,7 @@ export const buildLoggerOptions: (minLevel?: pino.Level) => LoggerOptions | unde
       formatters: {
         bindings: (bindings) => ({ hostname: bindings.hostname as string }),
         level: (label) => ({ level: label.toUpperCase() }),
+        log: (obj) => obj, // Ensure logged objects are included
       },
       timestamp: pino.stdTimeFunctions.isoTime,
     };

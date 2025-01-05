@@ -7,7 +7,7 @@ export const hostInfo: HostInfo = (() => {
   const host = HOST;
   const port = parseInt(PORT, 10);
   const hostname = os.hostname();
-  if (host !== "localhost") {
+  if (host !== "localhost" || process.env.NODE_ENV === "production") {
     let ipV4: string | undefined;
     const ifaces = os.networkInterfaces();
     for (const ifaceName in ifaces) {

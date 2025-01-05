@@ -11,9 +11,21 @@ import {
   RoonImageScale,
 } from "@model";
 import { clientManager } from "@service";
+import { fetchTrackStory, fetchTrackSuggestions } from "../ai-service/chatgpt";
+import { Track, TrackStory } from "../ai-service/types/track";
 
 interface ClientIdParam {
   client_id: string;
+}
+
+interface AISearchParam {
+  client_id: string;
+  query: string;
+}
+
+interface PlayTracksParam {
+  zoneId: string;
+  tracks: Track[];
 }
 
 interface ImageQuery {
@@ -39,6 +51,47 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     const client_id = req.params.client_id;
     clientManager.unregister(client_id);
     return reply.status(204).send();
+  });
+  server.post<{ Params: AISearchParam; Body: string }>("/:client_id/aisearch", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (client) {
+      logger.debug({ client }, "Received AI search request");
+      const query = req.body;
+      const tracks = await fetchTrackSuggestions(query);
+      return reply.status(200).send(tracks);
+    } else {
+      return badRequestReply;
+    }
+  });
+  server.post<{ Params: { client_id: string }; Body: Track }>("/:client_id/trackstory", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (client) {
+      const track = req.body;
+
+      if (!track.artist || !track.track) {
+        return reply.status(400).send({ error: "Both artist and track must be provided." });
+      }
+
+      try {
+        const story: TrackStory = await fetchTrackStory(track);
+        return await reply.status(200).send(story);
+      } catch (error) {
+        logger.error(error, "Error fetching track story.");
+        return reply.status(500).send({ error: "Error fetching track story." });
+      }
+    } else {
+      return badRequestReply;
+    }
+  });
+  server.post<{ Params: ClientIdParam; Body: PlayTracksParam }>("/:client_id/play-tracks", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (client) {
+      const { zoneId, tracks } = req.body;
+      const unfoundTracks = (await client.playTracks(zoneId, tracks)) as Track[];
+      return reply.status(200).send(unfoundTracks);
+    } else {
+      return badRequestReply;
+    }
   });
   server.post<{ Params: ClientIdParam; Body: Command }>("/:client_id/command", async (req, reply) => {
     const { client, badRequestReply } = getClient(req, reply);
