@@ -202,12 +202,13 @@ export const AITrackStoryAction: AITrackStoryAction = {
   id: "ai-track-story-action",
   type: ActionType.AI_TRACK_STORY,
   button: {
-    label: "Track Story",
+    label: "Track Info",
     icon: "info",
   },
   track: {
     artist: "",
     track: "",
+    album: "",
   },
 };
 

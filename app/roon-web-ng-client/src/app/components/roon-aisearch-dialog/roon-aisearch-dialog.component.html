@@ -8,7 +8,7 @@
     <div class="search-input-container">
       <mat-form-field appearance="fill" class="search-field">
         <mat-label>Enter AI Prompt for tracks</mat-label>
-        <input matInput [(ngModel)]="searchQuery" />
+        <input matInput [(ngModel)]="searchQuery" (keyup.enter)="performSearch()" />
       </mat-form-field>
       <button mat-raised-button color="primary" (click)="performSearch()" class="search-button">
         Search

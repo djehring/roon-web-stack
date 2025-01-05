@@ -11,6 +11,7 @@ import {
 
 export interface SuggestedTrack {
   artist: string;
+  album: string;
   track: string;
 }
 

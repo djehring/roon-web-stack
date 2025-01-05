@@ -25,8 +25,16 @@ export class TrackStoryDialogComponent {
   readonly isLoading$ = this._isLoading.asObservable();
 
   readonly $trackDisplay = computed(() => {
-    const { title, artist } = this._$zone().nice_playing?.track ?? { title: "", artist: "" };
-    return { title, artist };
+    const zone = this._$zone();
+    if (!zone.nice_playing?.track) {
+      return { title: "", artist: "", album: "" };
+    }
+    const { title = "", artist = "", disk } = zone.nice_playing.track;
+    return {
+      title,
+      artist,
+      album: disk?.title || "",
+    };
   });
 
   private readonly _story = new BehaviorSubject<TrackStory | null>(null);
@@ -39,19 +47,24 @@ export class TrackStoryDialogComponent {
   getTrackStory(): void {
     const track = this.$trackDisplay();
     if (!track.title || !track.artist) {
+      this._dialogRef.close();
       return;
     }
     const suggestedTrack: SuggestedTrack = {
       track: track.title,
       artist: track.artist,
+      album: track.album,
     };
     this._isLoading.next(true);
     this._roonService.aiGetTrackStory(suggestedTrack).subscribe({
       next: (result) => {
-        this._story.next(result.story);
+        if (result?.story) {
+          this._story.next(result.story);
+        }
         this._isLoading.next(false);
       },
-      error: () => {
+      error: (error: unknown) => {
+        console.error("Error fetching track story:", error);
         this._isLoading.next(false);
       },
     });

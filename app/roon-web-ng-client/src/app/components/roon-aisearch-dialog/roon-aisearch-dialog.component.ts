@@ -1,5 +1,5 @@
 import { NgForOf, NgIf } from "@angular/common";
-import { Component, inject } from "@angular/core";
+import { AfterViewInit, Component, inject, ViewChild } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButton } from "@angular/material/button";
 import { MatDialogActions, MatDialogContent, MatDialogRef, MatDialogTitle } from "@angular/material/dialog";
@@ -14,6 +14,7 @@ import { RoonService } from "@services/roon.service";
   selector: "nr-roon-aisearch-dialog",
   templateUrl: "./roon-aisearch-dialog.component.html",
   styleUrls: ["./roon-aisearch-dialog.component.scss"],
+  standalone: true,
   imports: [
     MatDialogTitle,
     MatDialogContent,
@@ -30,7 +31,9 @@ import { RoonService } from "@services/roon.service";
     NgForOf,
   ],
 })
-export class RoonAISearchDialogComponent {
+export class RoonAISearchDialogComponent implements AfterViewInit {
+  @ViewChild(MatInput) searchInput!: MatInput;
+
   searchQuery: string = "";
   loading: boolean = false;
   searchResults: SuggestedTrack[] = [];
@@ -40,16 +43,25 @@ export class RoonAISearchDialogComponent {
     this._roonService = inject(RoonService);
   }
 
+  ngAfterViewInit() {
+    setTimeout(() => {
+      this.searchInput.focus();
+    });
+  }
+
   playTracks(): void {
     this.loading = true;
 
-    // Kick off the playTracks promise without waiting
-    void this._roonService.playTracks(this.searchResults).catch((error: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error("Error playing tracks:", error);
-    });
-    // Close the dialog immediately
-    this.dialogRef.close(this.searchResults);
+    this._roonService
+      .playTracks(this.searchResults)
+      .then(() => {
+        this.dialogRef.close(this.searchResults);
+      })
+      .catch((error: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("Error playing tracks:", error);
+        this.loading = false;
+      });
   }
 
   closeDialog(): void {
