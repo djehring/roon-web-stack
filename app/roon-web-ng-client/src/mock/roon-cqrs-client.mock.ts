@@ -30,6 +30,6 @@ export const roonWebClientFactoryMock = {
   build,
 };
 
-jest.mock("@nihilux/roon-web-client", () => ({
+jest.mock("@djehring/roon-web-client", () => ({
   roonWebClientFactory: roonWebClientFactoryMock,
 }));

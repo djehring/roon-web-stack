@@ -5,7 +5,7 @@ For now, this part is not really documented, but this is mainly a classic `Angul
 If you want to use the `cli` from the `root` of the `monorepo`, don't forget to prefix your `yarn` command:
 
 ```bash
-yarn workspace @nihilux/roon-web-ng-client ng g c components/settings
+yarn workspace @djehring/roon-web-ng-client ng g c components/settings
 # this command has been used to generate the scaffolding of the settings component
 ```
 
@@ -25,7 +25,7 @@ The dev server is configured to proxy `/api` to `localhost:3000/api`, so if you 
 
 ## Further help
 
-To get more help on the Angular CLI use `yarn workspace @nihilux/roon-cqrs-web-ng-client ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+To get more help on the Angular CLI use `yarn workspace @djehring/roon-web-ng-client ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
 
 
 ## Contributing

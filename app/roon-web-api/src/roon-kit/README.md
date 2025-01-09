@@ -6,7 +6,7 @@
 
 _More precisely he is the author of this package and deserves all credits regarding its architecture, its design and its implementation._  
 _I've just discovered and corrected some`typings` error with the underlying `roon` API.
-As I wanted to extract the model part to share it between the components of this monorepo and needed a way to later integrate other part of the `roon` API following the same pattern, I've simply inlined the code here, after extraction of the model in the `workspace` [@nihilux/roon-cqrs-model](../../../../packages/roon-web-model/src/roon-kit/index.d.ts)._  
+As I wanted to extract the model part to share it between the components of this monorepo and needed a way to later integrate other part of the `roon` API following the same pattern, I've simply inlined the code here, after extraction of the model in the `workspace` [@djehring/roon-cqrs-model](../../../../packages/roon-web-model/src/roon-kit/index.d.ts)._  
 _The original `LICENSE` has been copied in this folder, the rest of this document is  the original `README.md` from [Stevenic/roon-kit](https://github.com/Stevenic/roon-kit) (even the parts that are no more relevant in the case of this repo)._  
 _Once again, thanks [`@Stevenic`](https://github.com/Stevenic) for this great module!_
 

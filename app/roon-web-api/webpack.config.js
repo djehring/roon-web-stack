@@ -3,6 +3,8 @@ const nodeExternals = require("webpack-node-externals");
 const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
 const ESLintPlugin = require("eslint-webpack-plugin");
 const NodemonPlugin = require("nodemon-webpack-plugin");
+const webpack = require('webpack');
+const package = require('./package.json');
 
 const isProduction = process.env.NODE_ENV !== "development";
 
@@ -26,6 +28,9 @@ const config = {
       configType: "flat",
     }),
     new NodemonPlugin(),
+    new webpack.DefinePlugin({
+      'process.env.npm_package_version': JSON.stringify(package.version)
+    })
   ],
   module: {
     rules: [

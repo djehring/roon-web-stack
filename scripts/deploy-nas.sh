@@ -46,7 +46,7 @@ echo "Deploying container..."
 ssh -t ${NAS_USER}@${NAS_HOST} "echo '${ROOT_PASSWORD}' | sudo -S bash -c '\
   cd ${REMOTE_PATH} && \
   /usr/local/bin/docker rm -f roon-web-stack || true && \
-  /usr/local/bin/docker rmi nihiluxorg/roon-web-stack:latest || true && \
+  /usr/local/bin/docker rmi djehring/roon-web-stack:latest || true && \
   ls -l roon-backend.tar && \
   echo "Loading Docker image..." && \
   /usr/local/bin/docker load < ${REMOTE_PATH}/roon-backend.tar && \
@@ -57,7 +57,7 @@ ssh -t ${NAS_USER}@${NAS_HOST} "echo '${ROOT_PASSWORD}' | sudo -S bash -c '\
     --env-file ${REMOTE_PATH}/.env \
     -v ${REMOTE_PATH}/config:/usr/src/app/config \
     --pull never \
-    nihiluxorg/roon-web-stack:latest \
+    djehring/roon-web-stack:latest \
 '"
 
 echo "Deployment complete!"

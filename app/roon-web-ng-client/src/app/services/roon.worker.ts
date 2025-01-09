@@ -1,4 +1,5 @@
 import { defer, retry } from "rxjs";
+import { roonWebClientFactory } from "@djehring/roon-web-client";
 import { RoonWebClient, SharedConfigMessage } from "@model";
 import {
   AISearchApiResult,
@@ -19,7 +20,6 @@ import {
   WorkerClientAction,
   ZoneStateWorkerEvent,
 } from "@model/client";
-import { roonWebClientFactory } from "@nihilux/roon-web-client";
 
 let _roonClient: RoonWebClient;
 let _isRefreshing = false;

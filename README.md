@@ -1,5 +1,8 @@
 # roon-web-stack
 
+This is a fork of [@nihilux/roon-web-stack](https://github.com/nihilux-org/roon-web-stack).
+Original work by [@nihilux](https://github.com/nihilux-org).
+
 [![CI](https://github.com/nihilux-org/roon-web-stack/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nihilux-org/roon-web-stack/actions/workflows/ci.yml)
 [![CD](https://github.com/nihilux-org/roon-web-stack/actions/workflows/cd.yml/badge.svg)](https://github.com/nihilux-org/roon-web-stack/actions/workflows/cd.yml)
 
@@ -169,7 +172,7 @@ Recently I've only used `typescript`, at work, to build `serverless` and `@edge`
 This project was for me an occasion to go back to `web` development (I'd not done that for at least 7 years), helping to deal with some personal stuff in the process.
 
 So, development will be agile, on my personal time. I'm not planning spending more than 3 to 5 hours a week on this project in the future. Otherwise, it should become my job.  
-See [what's coming for this project](./doc/what-s-coming.md) to learn how to submit feature request and how to participate in the priorisation process.
+See [what's coming for this project](./doc/what's-coming.md) to learn how to submit feature request and how to participate in the priorisation process.
 
 Any contribution is welcome, see [CONTRIBUTING](./CONTRIBUTING.md) for info.  
 

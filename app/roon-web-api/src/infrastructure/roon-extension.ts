@@ -22,15 +22,15 @@ import {
 import { Extension } from "@roon-kit";
 import { settingsOptions } from "./roon-extension-settings";
 
-export const extension_version = "0.0.11-beta-5";
+export const extension_version = process.env.npm_package_version ?? "0.0.0";
 
 const extension: RoonExtension<ExtensionSettings> = new Extension({
   description: {
     extension_id: "roon-web-stack",
     display_name: `roon web stack @${hostInfo.hostname}`,
     display_version: extension_version,
-    publisher: "nihilux.org",
-    email: "nihil@nihilux.org",
+    publisher: "jehring.org",
+    email: "david@jehring.org",
     website: `http://${hostInfo.ipV4}:${hostInfo.port}`,
   },
   RoonApiBrowse: "required",

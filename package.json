@@ -1,9 +1,9 @@
 {
-  "name": "@nihilux/roon-web-stack",
-  "version": "0.0.14",
-  "description": "a web stack, from api to web client, to use roon ia a browser",
+  "name": "@djehring/roon-web-stack",
+  "version": "0.0.16",
+  "description": "a web stack, from api to web client, to use roon in a browser (forked from @nihilux)",
   "private": true,
-  "author": "nihil@nihilux.org",
+  "author": "djehring@github.com",
   "license": "MIT",
   "workspaces": [
     "packages/*",
@@ -22,11 +22,13 @@
     "lint": "yarn workspaces foreach -At run lint",
     "lint:fix": "yarn workspaces foreach -At run lint:fix",
     "test": "yarn workspaces foreach -At run test",
-    "backend": "yarn workspace @nihilux/roon-web-api start",
-    "backend:prod": "yarn workspace @nihilux/roon-web-api start:prod",
-    "frontend": "yarn workspace @nihilux/roon-web-ng-client start",
-    "frontend:prod": "yarn workspace @nihilux/roon-web-ng-client start:prod",
-    "jest": "yarn workspaces foreach -At run jest"
+    "backend": "yarn workspace @djehring/roon-web-api start",
+    "backend:prod": "yarn workspace @djehring/roon-web-api start:prod",
+    "frontend": "yarn workspace @djehring/roon-web-ng-client start",
+    "frontend:prod": "yarn workspace @djehring/roon-web-ng-client start:prod",
+    "jest": "yarn workspaces foreach -At run jest",
+    "build:nas": "./scripts/build-nas-image.sh",
+    "deploy:nas": "yarn build && yarn build:nas && ./scripts/deploy-nas.sh"
   },
   "resolutions": {
     "punycode": "^2.3.1"

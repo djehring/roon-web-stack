@@ -1,18 +1,15 @@
 #!/bin/bash
 
-# Build the frontend
-echo "Building frontend..."
-yarn workspace @nihilux/roon-web-ng-client build
-
 # Copy the frontend to the backend
+mkdir -p ./app/roon-web-api/bin/web
 cp -r ./app/roon-web-ng-client/dist/roon-web-ng-client/browser/* ./app/roon-web-api/bin/web/
 
-# Build the AMD64 image
-docker buildx build --platform linux/amd64 \
-  -t nihiluxorg/roon-web-stack:latest \
+# Build the Docker image for AMD64
+docker buildx build \
+  --platform linux/amd64 \
   -f app/roon-web-api/Dockerfile \
-  --load \
+  -t djehring/roon-web-stack:latest \
   .
 
-# Save to tar file
-docker save nihiluxorg/roon-web-stack:latest > roon-backend.tar
+# Save the image
+docker save djehring/roon-web-stack:latest -o roon-backend.tar

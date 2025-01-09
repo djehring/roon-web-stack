@@ -18,10 +18,10 @@ For typings, you must also add the [model](../roon-web-model) of this `monorepo`
 ```json
 {
   "dependencies": {
-    "@nihilux/roon-web-client": "workspace:*"
+    "@djehring/roon-web-client": "workspace:*"
   },
   "devDependencies": {
-    "@nihilux/roon-web-model": "workspace:*"
+    "@djehring/roon-web-model": "workspace:*"
   }
 }
 ```
@@ -38,7 +38,7 @@ Just modify the first part of this `cp` command, your `index.html` and the rest 
 The only export of this package is a factory object with a `build` function that takes the `api` host as a `URL`:
 
 ```typescript
-import { roonWebClientFactory } from "@nihilux/roon-web-client";
+import { roonWebClientFactory } from "@djehring/roon-web-client";
 
 const protocol = "http";
 const host = "hostname";

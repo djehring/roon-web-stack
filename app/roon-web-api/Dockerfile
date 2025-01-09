@@ -6,7 +6,7 @@ RUN mkdir -p /usr/src/roon-web-stack
 WORKDIR /usr/src/roon-web-stack
 COPY . /usr/src/roon-web-stack
 RUN corepack enable yarn && \
-    yarn workspaces focus @nihilux/roon-web-api --production
+    yarn workspaces focus @djehring/roon-web-api --production
 
 FROM alpine:${ALPINE_VERSION}
 WORKDIR /usr/src/app

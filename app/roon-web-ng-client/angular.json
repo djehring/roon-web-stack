@@ -10,7 +10,7 @@
     "analytics": "c326a725-f0b8-4809-8b48-1189e242c595"
   },
   "projects": {
-    "@nihilux/roon-web-ng-client": {
+    "@djehring/roon-web-ng-client": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -68,10 +68,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "@nihilux/roon-web-ng-client:build:production"
+              "buildTarget": "@djehring/roon-web-ng-client:build:production"
             },
             "development": {
-              "buildTarget": "@nihilux/roon-web-ng-client:build:development",
+              "buildTarget": "@djehring/roon-web-ng-client:build:development",
               "proxyConfig": "src/proxy.conf.json"
             }
           },
@@ -80,7 +80,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "buildTarget": "@nihilux/roon-web-ng-client:build"
+            "buildTarget": "@djehring/roon-web-ng-client:build"
           }
         },
         "test": {
