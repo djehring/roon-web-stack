@@ -3,13 +3,13 @@ import process from "process";
 import { HostInfo } from "@model";
 
 export const hostInfo: HostInfo = (() => {
-  const { HOST = "localhost", PORT = "3000" } = process.env;
-  const host = HOST;
+  const { HOST = "0.0.0.0", PORT = "3000" } = process.env;
   const port = parseInt(PORT, 10);
   const hostname = os.hostname();
-  if (host !== "localhost" || process.env.NODE_ENV === "production") {
-    let ipV4: string | undefined;
-    const ifaces = os.networkInterfaces();
+  const ifaces = os.networkInterfaces();
+
+  let ipV4: string | undefined;
+  if (HOST !== "localhost" || process.env.NODE_ENV === "production") {
     for (const ifaceName in ifaces) {
       const iface = ifaces[ifaceName];
       if (iface) {
@@ -19,7 +19,7 @@ export const hostInfo: HostInfo = (() => {
             !addr.internal &&
             // exclude docker default bridge
             !addr.mac.startsWith("02:42") &&
-            // exclude obviously VPN adresses
+            // exclude obviously VPN addresses
             addr.mac !== "00:00:00:00:00:00"
           ) {
             ipV4 = addr.address;
@@ -28,9 +28,12 @@ export const hostInfo: HostInfo = (() => {
         }
       }
     }
-    ipV4 = ipV4 ?? host;
-    return { host, port, ipV4, hostname };
-  } else {
-    return { host, port, hostname, ipV4: host };
   }
+
+  return {
+    host: HOST,
+    port,
+    ipV4: ipV4 ?? HOST,
+    hostname,
+  };
 })();

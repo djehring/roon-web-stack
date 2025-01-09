@@ -1,4 +1,5 @@
 ARG ALPINE_VERSION=3.20
+ARG TARGETPLATFORM=linux/amd64
 
 FROM node:22-alpine${ALPINE_VERSION} AS builder
 RUN mkdir -p /usr/src/roon-web-stack
@@ -17,6 +18,7 @@ RUN mkdir /usr/src/app/config \
 ENV HOST=0.0.0.0
 COPY --from=builder /usr/local/bin/node /usr/local/bin/
 COPY --from=builder /usr/local/bin/docker-entrypoint.sh /usr/local/bin/
+COPY --from=builder /usr/src/roon-web-stack/.env /usr/src/app/.env
 ENTRYPOINT ["docker-entrypoint.sh"]
 RUN apk add --no-cache libstdc++ dumb-init
 COPY --from=builder /usr/src/roon-web-stack/LICENSE ./LICENSE

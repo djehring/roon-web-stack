@@ -58,13 +58,10 @@ export class TrackStoryDialogComponent {
     this._isLoading.next(true);
     this._roonService.aiGetTrackStory(suggestedTrack).subscribe({
       next: (result) => {
-        if (result?.story) {
-          this._story.next(result.story);
-        }
+        this._story.next(result.story);
         this._isLoading.next(false);
       },
-      error: (error: unknown) => {
-        console.error("Error fetching track story:", error);
+      error: () => {
         this._isLoading.next(false);
       },
     });
