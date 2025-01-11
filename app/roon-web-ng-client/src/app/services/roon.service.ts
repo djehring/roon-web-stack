@@ -22,6 +22,7 @@ import {
   RoonState,
   SharedConfig,
   SuggestedTrack,
+  TranscriptionResponse,
   ZoneState,
 } from "@model";
 import {
@@ -47,6 +48,8 @@ import {
   RawWorkerEvent,
   TrackStoryApiResult,
   TrackStoryWorkerApiRequest,
+  TranscriptionApiResult,
+  TranscriptionWorkerApiRequest,
   VersionApiResult,
   VersionWorkerApiRequest,
   VisibilityState,
@@ -88,6 +91,7 @@ export class RoonService {
     { resolve: (value: AISearchResponse) => void; reject: (reason: Error | string) => void }
   >;
   private readonly _apiTrackStoryCallbacks: Map<number, ApiResultCallback<AITrackStoryResponse>>;
+  private readonly _apiTranscriptionCallbacks: Map<number, ApiResultCallback<TranscriptionResponse>> = new Map();
   private _workerApiRequestId: number;
   private _isStarted: boolean;
   private _outputCallback?: OutputCallback;
@@ -135,6 +139,7 @@ export class RoonService {
       { resolve: (value: AISearchResponse) => void; reject: (reason: Error | string) => void }
     >();
     this._apiTrackStoryCallbacks = new Map<number, ApiResultCallback<AITrackStoryResponse>>();
+    this._apiTranscriptionCallbacks = new Map<number, ApiResultCallback<TranscriptionResponse>>();
     this._workerApiRequestId = 0;
     this._version = "unknown";
   }
@@ -469,6 +474,31 @@ export class RoonService {
     return this.buildTrackStoryResponseResponseObservable(worker, apiRequest);
   };
 
+  transcribeAudio: (audioBlob: Blob) => Promise<string> = (audioBlob) => {
+    const worker = this.ensureStarted();
+    const id = this.nextWorkerApiRequestId();
+    const apiRequest: TranscriptionWorkerApiRequest = {
+      id,
+      type: "transcribe",
+      data: { audio: audioBlob },
+    };
+    return new Promise((resolve, reject) => {
+      const apiResultCallback: ApiResultCallback<TranscriptionResponse> = {
+        next: (response) => {
+          resolve(response.text);
+        },
+        error: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      };
+      this._apiTranscriptionCallbacks.set(apiRequest.id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  };
+
   private reconnect: () => void = () => {
     if (this._worker) {
       const message: WorkerClientActionMessage = {
@@ -628,6 +658,9 @@ export class RoonService {
       case "track-story":
         this.onTrackStoryApiResult(apiResultEvent);
         break;
+      case "transcribe":
+        this.onTranscriptionApiResult(apiResultEvent);
+        break;
     }
   }
 
@@ -661,7 +694,8 @@ export class RoonService {
       if (apiResult.data) {
         callback.next(apiResult.data);
       } else if (apiResult.error && callback.error) {
-        callback.error(apiResult.error);
+        const errorStr = apiResult.error instanceof Error ? apiResult.error.message : String(apiResult.id);
+        callback.error(errorStr);
       }
       this._apiStringCallbacks.delete(apiResult.id);
     }
@@ -685,7 +719,8 @@ export class RoonService {
       if (apiResult.data) {
         callback.next(apiResult.data); // Send the result to the callback
       } else if (apiResult.error && callback.error) {
-        callback.error(apiResult.error); // Handle errors
+        const errorStr = apiResult.error instanceof Error ? apiResult.error.message : String(apiResult.id);
+        callback.error(errorStr);
       }
       this._apiStringCallbacks.delete(apiResult.id); // Cleanup the callback
     }
@@ -718,6 +753,18 @@ export class RoonService {
         callback.error(apiResult.error || new Error("No data received"));
       }
       this._apiTrackStoryCallbacks.delete(apiResult.id);
+    }
+  }
+
+  private onTranscriptionApiResult(apiResult: TranscriptionApiResult) {
+    const callback = this._apiTranscriptionCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.data) {
+        callback.next(apiResult.data);
+      } else if (callback.error) {
+        callback.error(apiResult.error || new Error("No data received"));
+      }
+      this._apiTranscriptionCallbacks.delete(apiResult.id);
     }
   }
 
@@ -801,6 +848,26 @@ export class RoonService {
         },
       };
       this._apiTrackStoryCallbacks.set(apiRequest.id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  }
+
+  private buildTranscriptionResponseObservable(worker: Worker, apiRequest: RawWorkerApiRequest) {
+    return new Observable<TranscriptionResponse>((subscriber) => {
+      const apiResultCallback: ApiResultCallback<TranscriptionResponse> = {
+        next: (response) => {
+          subscriber.next(response);
+          subscriber.complete();
+        },
+        error: (error) => {
+          subscriber.error(error);
+          subscriber.complete();
+        },
+      };
+      this._apiTranscriptionCallbacks.set(apiRequest.id, apiResultCallback);
       worker.postMessage({
         event: "worker-api",
         data: apiRequest,

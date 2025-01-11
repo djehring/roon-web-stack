@@ -16,6 +16,7 @@ import {
   RoonPath,
   SharedConfig,
   SuggestedTrack,
+  TranscriptionResponse,
   ZoneState,
 } from "@model";
 
@@ -110,6 +111,10 @@ export interface TrackStoryWorkerApiRequest extends WorkerApiRequest<{ track: Su
   type: "track-story";
 }
 
+export interface TranscriptionWorkerApiRequest extends WorkerApiRequest<{ audio: Blob }> {
+  type: "transcribe";
+}
+
 export type RawWorkerApiRequest =
   | BrowseWorkerApiRequest
   | LoadWorkerApiRequest
@@ -121,7 +126,8 @@ export type RawWorkerApiRequest =
   | FindItemIndexWorkerApiRequest
   | AISearchWorkerApiRequest
   | PlayTracksWorkerApiRequest
-  | TrackStoryWorkerApiRequest;
+  | TrackStoryWorkerApiRequest
+  | TranscriptionWorkerApiRequest;
 
 export interface WorkerApiRequestMessage extends WorkerMessage<RawWorkerApiRequest> {
   event: "worker-api";
@@ -204,6 +210,10 @@ export interface TrackStoryApiResult extends ApiResult<AITrackStoryResponse> {
   type: "track-story";
 }
 
+export interface TranscriptionApiResult extends ApiResult<TranscriptionResponse> {
+  type: "transcribe";
+}
+
 export type RawApiResult =
   | BrowseApiResult
   | LoadApiResult
@@ -212,7 +222,8 @@ export type RawApiResult =
   | FoundItemIndexApiResult
   | AISearchApiResult
   | PlayTracksApiResult
-  | TrackStoryApiResult;
+  | TrackStoryApiResult
+  | TranscriptionApiResult;
 
 export interface ApiResultWorkerEvent extends WorkerEvent<RawApiResult> {
   event: "apiResult";
@@ -225,7 +236,8 @@ export interface ApiResultCallback<
     | RoonApiBrowseResponse
     | RoonApiBrowseLoadResponse
     | AISearchResponse
-    | AITrackStoryResponse,
+    | AITrackStoryResponse
+    | TranscriptionResponse,
 > {
   next: (u: U) => void;
   error?: (error: unknown) => void;

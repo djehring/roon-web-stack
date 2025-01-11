@@ -1,6 +1,9 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from "@angular/cdk/drag-drop";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal } from "@angular/core";
+import { CommonModule } from "@angular/common";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, Signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
 import { MatButton, MatIconButton } from "@angular/material/button";
+import { MatOptionModule } from "@angular/material/core";
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -8,8 +11,11 @@ import {
   MatDialogRef,
   MatDialogTitle,
 } from "@angular/material/dialog";
+import { MatExpansionModule } from "@angular/material/expansion";
+import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIcon } from "@angular/material/icon";
 import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
+import { MatSelectModule } from "@angular/material/select";
 import { MatTab, MatTabContent, MatTabGroup } from "@angular/material/tabs";
 import { CustomActionsManagerComponent } from "@components/custom-actions-manager/custom-actions-manager.component";
 import { ZoneSelectorComponent } from "@components/zone-selector/zone-selector.component";
@@ -37,7 +43,9 @@ import { SettingsService } from "@services/settings.service";
 
 @Component({
   selector: "nr-settings-dialog",
+  standalone: true,
   imports: [
+    CommonModule,
     CdkDrag,
     CdkDragHandle,
     CdkDropList,
@@ -57,12 +65,17 @@ import { SettingsService } from "@services/settings.service";
     NgxSpatialNavigableStarterDirective,
     ZoneSelectorComponent,
     NgxSpatialNavigableElementDirective,
+    MatExpansionModule,
+    MatFormFieldModule,
+    MatSelectModule,
+    FormsModule,
+    MatOptionModule,
   ],
   templateUrl: "./settings-dialog.component.html",
   styleUrl: "./settings-dialog.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SettingsDialogComponent {
+export class SettingsDialogComponent implements OnInit {
   private readonly _dialogRef: MatDialogRef<SettingsDialogComponent>;
   private readonly _dialogService: DialogService;
   private readonly _settingsService: SettingsService;
@@ -79,6 +92,9 @@ export class SettingsDialogComponent {
   readonly displayModes: { id: DisplayMode; label: string }[];
   readonly version: string;
   readonly selectedTab: number;
+  audioDevices: MediaDeviceInfo[] = [];
+  selectedMicrophoneId = "";
+
   constructor() {
     const data = inject(MAT_DIALOG_DATA) as { selectedTab: number };
     this._dialogRef = inject<MatDialogRef<SettingsDialogComponent>>(MatDialogRef);
@@ -116,6 +132,30 @@ export class SettingsDialogComponent {
     this.$layoutClass = this._settingsService.displayModeClass();
     this.selectedTab = data.selectedTab;
     this.version = inject(RoonService).version();
+  }
+
+  ngOnInit(): void {
+    void this.loadAudioDevices();
+  }
+
+  private async loadAudioDevices(): Promise<void> {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      this.audioDevices = devices.filter((device) => device.kind === "audioinput");
+
+      const savedDeviceId = localStorage.getItem("preferredMicrophoneId");
+      if (savedDeviceId) {
+        this.selectedMicrophoneId = savedDeviceId;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Error loading audio devices:", err);
+    }
+  }
+
+  onMicrophoneChange(): void {
+    localStorage.setItem("preferredMicrophoneId", this.selectedMicrophoneId);
   }
 
   chosenThemes() {
@@ -184,5 +224,15 @@ export class SettingsDialogComponent {
 
   onMenuClosed() {
     this._spatialNavigableService.resumeSpatialNavigation();
+  }
+
+  getCurrentMicrophoneLabel(): string {
+    const device = this.audioDevices.find((d) => d.deviceId === this.selectedMicrophoneId);
+    return device?.label || "Default Microphone";
+  }
+
+  setMicrophone(deviceId: string): void {
+    this.selectedMicrophoneId = deviceId;
+    this.onMicrophoneChange();
   }
 }

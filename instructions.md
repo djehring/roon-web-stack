@@ -5,6 +5,13 @@
 ### AI Playlist Generation
 - AI Search button will allow the user to input information into a search field in a popup dialog
 - Use natural language prompts to generate track lists using this search field
+  - Text input directly in search field
+  - Voice input via recording button
+    - Click microphone icon to start recording
+    - Visual indicator shows recording status
+    - Recording automatically stops after silence or manual stop
+    - Audio is transcribed and populated into search field
+    - User can edit transcribed text before submitting
 - The AI understands musical concepts, genres, moods, and contexts
 - Generated tracks are automatically located in your Roon library
 - Tracks are queued for playback once found
@@ -142,3 +149,33 @@ graph LR
 - AI responses may vary based on the complexity of the prompt
 - Track availability depends on your Roon library
 - Internet connection required for AI features
+
+## Technical Implementation Details
+
+### Voice Input Feature
+```typescript
+// Component Structure
+app/roon-web-ng-client/
+├── components/
+│   └── ai-search/
+│       ├── ai-search.component.ts     # Main dialog component
+│       ├── voice-recorder.component.ts # Recording handling
+│       └── voice-indicator.component.ts # Recording status UI
+```
+
+#### Recording Flow
+1. User clicks microphone icon in search dialog
+2. Browser requests microphone permission if not already granted
+3. Visual indicator shows active recording status
+4. Audio is recorded using Web Audio API
+5. Recording stops on:
+   - Silence detection (>2 seconds)
+   - Manual stop button
+   - Maximum duration (30 seconds)
+6. Audio is sent to backend for transcription
+7. Transcribed text appears in search field
+
+#### Backend Processing
+- Audio is transcribed using OpenAI Whisper API
+- Transcription is returned to frontend
+- Original audio is discarded after transcription

@@ -4,7 +4,6 @@
 
 <mat-dialog-content>
   <div class="search-container">
-    <!-- Search Field and Button -->
     <div class="search-input-container">
       <mat-form-field appearance="fill" class="search-field">
         <mat-label>Enter AI Prompt for tracks</mat-label>
@@ -15,36 +14,48 @@
       </button>
     </div>
 
-    <!-- Loading Spinner -->
-    <div class="loading-spinner" *ngIf="loading">
-      <mat-progress-spinner diameter="50" strokeWidth="5" color="accent" mode="indeterminate"></mat-progress-spinner>
+    <!-- Show loading spinner during transcription or search -->
+    <mat-spinner *ngIf="loading || transcribing" diameter="40" class="center-spinner">
+    </mat-spinner>
+
+    <!-- Status messages -->
+    <div class="status-message" *ngIf="transcribing">
+      Transcribing audio...
     </div>
 
-    <!-- Search Results -->
-    <div class="results-container" *ngIf="!loading">
-      <mat-list *ngIf="searchResults.length > 0">
-        <mat-list-item *ngFor="let result of searchResults">
-          <div class="track-info">
-            <span class="track-title">{{ result.track }}</span><span class="track-artist">{{ result.artist }}</span>
-          </div>
-        </mat-list-item>
-      </mat-list>
-
-      <!-- No Results -->
-      <p *ngIf="searchResults.length === 0" class="no-results-text">No results found</p>
+    <div class="status-message" *ngIf="loading && !transcribing">
+      Searching...
     </div>
+
+    <!-- Only show "No tracks" when not in any loading state and we have no results -->
+    <div class="status-message" 
+         *ngIf="!loading && !transcribing && searchResults.length === 0 && searchQuery">
+      No tracks found
+    </div>
+
+    <!-- Results list -->
+    <mat-list *ngIf="!loading && !transcribing && searchResults.length > 0">
+      <mat-list-item *ngFor="let result of searchResults">
+        <div class="track-info">
+          <span class="track-title">{{ result.track }}</span><span class="track-artist">{{ result.artist }}</span>
+        </div>
+      </mat-list-item>
+    </mat-list>
   </div>
 </mat-dialog-content>
 
-<mat-dialog-actions align="end">
-  <button mat-button (click)="closeDialog()">Close</button>
-  <button
-    mat-raised-button
-    color="primary"
-    (click)="playTracks()"
-    *ngIf="searchResults.length > 0"
-    class="play-button"
-  >
-    Play
-  </button>
+<mat-dialog-actions>
+  <nr-voice-recorder (transcriptionComplete)="onTranscriptionComplete($event)"></nr-voice-recorder>
+  <div>
+    <button mat-button (click)="closeDialog()">Close</button>
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="playTracks()"
+      *ngIf="searchResults.length > 0"
+      class="play-button"
+    >
+      Play
+    </button>
+  </div>
 </mat-dialog-actions>

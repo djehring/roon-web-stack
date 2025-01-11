@@ -16,6 +16,7 @@ import {
   RawApiResult,
   RawWorkerApiRequest,
   TrackStoryApiResult,
+  TranscriptionApiResult,
   WorkerActionMessage,
   WorkerClientAction,
   ZoneStateWorkerEvent,
@@ -404,6 +405,26 @@ const onApiRequest = (apiRequest: RawWorkerApiRequest): void => {
         });
       break;
     }
+    case "transcribe":
+      void _roonClient
+        .transcribe(apiRequest.data.audio)
+        .then((data) => {
+          const message: TranscriptionApiResult = {
+            type: "transcribe",
+            id,
+            data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          const message: TranscriptionApiResult = {
+            type: "transcribe",
+            id,
+            error: error instanceof Error ? error : String(error),
+          };
+          postApiResult(message);
+        });
+      break;
   }
 };
 

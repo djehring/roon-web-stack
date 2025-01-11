@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-import { fastify } from "fastify";
+import { fastify, type FastifyPluginCallback } from "fastify";
 import * as process from "process";
 import { buildLoggerOptions, hostInfo } from "@infrastructure";
 import { clientManager, gracefulShutdownHook } from "@service";
@@ -17,8 +17,8 @@ const init = async (): Promise<void> => {
     logger: buildLoggerOptions("debug"),
   });
   const gracefulShutDown = gracefulShutdownHook(server);
-  await server.register(apiRoute);
-  await server.register(appRoute);
+  await server.register(apiRoute as FastifyPluginCallback);
+  await server.register(appRoute as FastifyPluginCallback);
   try {
     await server.listen({ host: hostInfo.host, port: hostInfo.port });
     gracefulShutDown.setReady();

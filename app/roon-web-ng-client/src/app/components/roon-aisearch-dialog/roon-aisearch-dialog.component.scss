@@ -35,7 +35,15 @@
   }
 
   mat-dialog-actions {
-    @include nr.mat-dialog-action-bottom-right();
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 24px;
+
+    > div {
+      display: flex;
+      gap: 8px;
+    }
   }
 
   .search-container {
@@ -48,17 +56,20 @@
   .search-input-container {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 2px;
-  }
+    gap: 8px;
+    margin-bottom: 16px;
 
-  .search-field {
-    flex: 1;
-  }
+    .search-field {
+      flex: 1;
+    }
 
-  .search-button {
-    white-space: nowrap;
+    nr-voice-recorder {
+      flex-shrink: 0;
+    }
+
+    .search-button {
+      flex-shrink: 0;
+    }
   }
 
   .results-container {
@@ -99,6 +110,15 @@
   .track-artist {
     font-style: italic;
     color: #555;
+  }
+
+  .center-spinner {
+    margin: 20px auto;
+  }
+
+  .status-message {
+    text-align: center;
+    margin: 20px 0;
   }
 
 }

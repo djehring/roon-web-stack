@@ -1,6 +1,7 @@
-import { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify";
 import { fastifyPlugin } from "fastify-plugin";
 import { FastifySSEPlugin } from "fastify-sse-v2";
+import { fastifyMultipart } from "@fastify/multipart";
 import { extension_version, logger, roon } from "@infrastructure";
 import {
   Client,
@@ -11,7 +12,7 @@ import {
   RoonImageScale,
 } from "@model";
 import { clientManager } from "@service";
-import { fetchTrackStory, fetchTrackSuggestions } from "../ai-service/chatgpt";
+import { fetchTrackStory, fetchTrackSuggestions, transcribeAudio } from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
 
 interface ClientIdParam {
@@ -36,8 +37,13 @@ interface ImageQuery {
   image_key: string;
 }
 
+interface TranscriptionRequest {
+  audio: Buffer;
+}
+
 const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<void> => {
   await server.register(FastifySSEPlugin);
+  await server.register(fastifyMultipart as FastifyPluginCallback);
   server.get("/version", (_: FastifyRequest, reply: FastifyReply) => {
     return reply.status(204).header("x-roon-web-stack-version", extension_version).send();
   });
@@ -208,6 +214,31 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       }
     }
   });
+
+  server.post<{ Params: { client_id: string }; Body: TranscriptionRequest }>(
+    "/:client_id/transcribe",
+    async (req, reply) => {
+      const { client, badRequestReply } = getClient(req, reply);
+      if (!client) {
+        return badRequestReply;
+      }
+      try {
+        // Multipart parsing
+        const parts = await req.file();
+        if (!parts || parts.fieldname !== "audio") {
+          // eslint-disable-next-line @typescript-eslint/return-await
+          return reply.status(400).send({ error: "Expected 'audio' field" });
+        }
+        const buffer = await parts.toBuffer();
+        const text = await transcribeAudio(buffer);
+        // eslint-disable-next-line @typescript-eslint/return-await
+        return reply.status(200).send({ text });
+      } catch (error) {
+        logger.error(error, "Error processing audio file");
+        return reply.status(500).send({ error: "Error processing audio file" });
+      }
+    }
+  );
 };
 
 const getClient = (
@@ -232,8 +263,11 @@ const getClient = (
   }
 };
 
-export default fastifyPlugin(async (app) => {
-  return app.register(apiRoute, {
-    prefix: "/api",
-  });
-});
+export default fastifyPlugin<{ prefix: string }>(
+  async (app) => {
+    return app.register(apiRoute, {
+      prefix: "/api",
+    });
+  },
+  { name: "api-route" }
+);

@@ -131,3 +131,19 @@ export async function fetchTrackStory(track: Track): Promise<TrackStory> {
     return story;
   }
 }
+
+export async function transcribeAudio(audioFile: Buffer): Promise<string> {
+  try {
+    const openaiInstance = getOpenAIInstance();
+    const response = await openaiInstance.audio.transcriptions.create({
+      file: new File([audioFile], "audio.webm", { type: "audio/webm" }),
+      model: "whisper-1",
+      language: "en",
+    });
+
+    return response.text;
+  } catch (error) {
+    logger.error("Error transcribing audio:", error);
+    throw error;
+  }
+}

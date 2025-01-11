@@ -74,6 +74,25 @@
         </div>
       </ng-template>
     </mat-tab>
+    <mat-tab label="Audio" bodyClass="settings-tab">
+      <ng-template matTabContent>
+        <div class="settings wide-settings audio-tab-content" 
+             style="height: 300px; padding-bottom: 64px;" 
+             ngxSnContainer>
+          <mat-form-field appearance="fill" style="width: 100%; margin: 16px;">
+            <mat-label>Current microphone</mat-label>
+            <mat-select [(ngModel)]="selectedMicrophoneId"
+                       (selectionChange)="setMicrophone($event.value)">
+              @for (device of audioDevices; track device.deviceId) {
+                <mat-option [value]="device.deviceId">
+                  {{ device.label || "Default Microphone" }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </ng-template>
+    </mat-tab>
   </mat-tab-group>
 </mat-dialog-content>
 <mat-dialog-actions align="end" ngxSnContainer>

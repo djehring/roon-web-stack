@@ -49,3 +49,44 @@ html, body { height: 100%; }
 body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
 
 @include nr.global();
+
+.mat-mdc-select-panel {
+  background-color: var(--mat-dialog-container-background-color) !important;
+}
+
+.mat-mdc-option {
+  background-color: var(--mat-dialog-container-background-color) !important;
+  color: var(--mat-dialog-container-color) !important;
+
+  &:hover {
+    background-color: var(--mat-option-hover-state-layer-color) !important;
+  }
+}
+
+.dark-theme-dialog.mat-mdc-select-panel {
+  background: var(--mat-dialog-container-background-color);
+
+  .mat-mdc-option {
+    color: var(--mat-dialog-container-color);
+    
+    &:hover:not(.mdc-list-item--disabled) {
+      background: rgba(255, 255, 255, 0.08);
+    }
+  }
+}
+
+::ng-deep .mat-snack-bar-container.opaque-snackbar {
+  background-color: #007BFF !important;  // Blue color
+  color: white !important;
+  opacity: 1 !important;
+  box-shadow: 0px 3px 5px rgba(0, 0, 0, 0.5) !important;
+  z-index: 1000 !important;  // Ensure it appears above other elements
+}
+
+::ng-deep .mat-snack-bar-container.opaque-snackbar .mat-simple-snackbar {
+  color: white !important;
+}
+
+::ng-deep .mat-snack-bar-container.opaque-snackbar .mat-button-wrapper {
+  color: white !important;
+} 

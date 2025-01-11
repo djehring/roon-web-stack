@@ -26,6 +26,7 @@ import {
   SharedConfigListener,
   SuggestedTrack,
   TrackStory,
+  TranscriptionResponse,
   ZoneState,
   ZoneStateListener,
 } from "@model";
@@ -621,6 +622,24 @@ class InternalRoonWebClient implements RoonWebClient {
 
   private currentClientId = (): string | undefined => {
     return this._clientPath?.substring(5);
+  };
+
+  transcribe: (audio: Blob) => Promise<TranscriptionResponse> = async (audio: Blob): Promise<TranscriptionResponse> => {
+    const clientPath = this.ensureStared();
+    const formData = new FormData();
+    formData.append("audio", audio, "audio.webm");
+
+    const transcribeUrl = new URL(`${clientPath}/transcribe`, this._apiHost);
+    const req = new Request(transcribeUrl, {
+      method: "POST",
+      body: formData,
+    });
+
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      return response.json() as Promise<TranscriptionResponse>;
+    }
+    throw new Error("Unable to transcribe audio");
   };
 }
 

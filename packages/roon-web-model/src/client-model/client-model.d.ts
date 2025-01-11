@@ -28,6 +28,7 @@ export interface RoonWebClient {
   playTracks: (zoneId: string, tracks: SuggestedTrack[]) => Promise<AISearchResponse>;
   restart: () => Promise<void>;
   refresh: () => Promise<void>;
+  transcribe: (audio: Blob) => Promise<TranscriptionResponse>;
   onRoonState: (listener: RoonStateListener) => void;
   offRoonState: (listener: RoonStateListener) => void;
   onCommandState: (listener: CommandStateListener) => void;
@@ -92,4 +93,8 @@ export interface AISearchResponse {
 
 export interface AITrackStoryResponse {
   story: TrackStory;
+}
+
+export interface TranscriptionResponse {
+  text: string;
 }
