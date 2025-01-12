@@ -68,11 +68,13 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "@djehring/roon-web-ng-client:build:production"
+              "buildTarget": "@djehring/roon-web-ng-client:build:production",
+              "proxyConfig": "src/proxy.conf.js"
             },
             "development": {
               "buildTarget": "@djehring/roon-web-ng-client:build:development",
-              "proxyConfig": "src/proxy.conf.json"
+              "proxyConfig": "src/proxy.conf.json",
+              "ssl": false
             }
           },
           "defaultConfiguration": "development"

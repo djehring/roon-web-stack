@@ -1,10 +1,10 @@
 {
   "name": "@djehring/roon-web-ng-client",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "start:prod": "ng serve --host=0.0.0.0",
+    "start:prod": "NODE_TLS_REJECT_UNAUTHORIZED=0 ng serve --configuration=production --host=0.0.0.0 --ssl --ssl-cert ../../certs/localhost+4.pem --ssl-key ../../certs/localhost+4-key.pem --proxy-config src/proxy.conf.js",
     "build": "ng lint && ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --coverage",

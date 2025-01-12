@@ -1,6 +1,6 @@
 {
   "name": "@djehring/roon-web-model",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "types": "src/index.d.ts",
   "license": "MIT",

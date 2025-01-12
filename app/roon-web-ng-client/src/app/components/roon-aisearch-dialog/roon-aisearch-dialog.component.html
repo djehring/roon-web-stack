@@ -9,7 +9,8 @@
         <mat-label>Enter AI Prompt for tracks</mat-label>
         <input matInput [(ngModel)]="searchQuery" (keyup.enter)="performSearch()" />
       </mat-form-field>
-      <button mat-raised-button color="primary" (click)="performSearch()" class="search-button">
+      <button mat-raised-button color="primary" (click)="performSearch()" class="search-button"
+              [disabled]="loading">
         Search
       </button>
     </div>

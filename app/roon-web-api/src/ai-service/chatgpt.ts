@@ -135,8 +135,15 @@ export async function fetchTrackStory(track: Track): Promise<TrackStory> {
 export async function transcribeAudio(audioFile: Buffer): Promise<string> {
   try {
     const openaiInstance = getOpenAIInstance();
+
+    // Use subarray instead of slice
+    const isMP4 = audioFile.subarray(4, 8).toString() === "ftyp";
+    const mimeType = isMP4 ? "audio/mp4" : "audio/webm";
+    const extension = isMP4 ? "mp4" : "webm";
+    logger.info("mimeType: " + mimeType);
+
     const response = await openaiInstance.audio.transcriptions.create({
-      file: new File([audioFile], "audio.webm", { type: "audio/webm" }),
+      file: new File([audioFile], `audio.${extension}`, { type: mimeType }),
       model: "whisper-1",
       language: "en",
     });

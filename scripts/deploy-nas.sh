@@ -51,12 +51,17 @@ ssh -t ${NAS_USER}@${NAS_HOST} "echo '${ROOT_PASSWORD}' | sudo -S bash -c '\
   echo "Loading Docker image..." && \
   /usr/local/bin/docker load < ${REMOTE_PATH}/roon-backend.tar && \
   echo "Running container..." && \
+  cd ${REMOTE_PATH} && \
   /usr/local/bin/docker run -d \
     --name roon-web-stack \
     --network host \
     --env-file ${REMOTE_PATH}/.env \
     -v ${REMOTE_PATH}/config:/usr/src/app/config \
+    -v ${REMOTE_PATH}/certs:/etc/ssl/certs \
     --pull never \
+    -e HTTPS=true \
+    -e SSL_KEY=/etc/ssl/certs/localhost+4-key.pem \
+    -e SSL_CERT=/etc/ssl/certs/localhost+4.pem \
     djehring/roon-web-stack:latest \
 '"
 

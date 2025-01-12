@@ -1,6 +1,6 @@
 {
   "name": "@djehring/roon-web-stack",
-  "version": "0.0.16",
+  "version": "0.0.18",
   "description": "a web stack, from api to web client, to use roon in a browser (forked from @nihilux)",
   "private": true,
   "author": "djehring@github.com",
@@ -28,7 +28,8 @@
     "frontend:prod": "yarn workspace @djehring/roon-web-ng-client start:prod",
     "jest": "yarn workspaces foreach -At run jest",
     "build:nas": "./scripts/build-nas-image.sh",
-    "deploy:nas": "yarn build && yarn build:nas && ./scripts/deploy-nas.sh"
+    "deploy:nas": "./scripts/deploy-nas.sh",
+    "patch.all": "yarn workspaces foreach --all version patch"
   },
   "resolutions": {
     "punycode": "^2.3.1"

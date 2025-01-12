@@ -1,6 +1,6 @@
 {
   "name": "@djehring/roon-web-client",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "main": "bin/roon-web-client.js",
   "typings": "bin/src/index.d.ts",
   "license": "MIT",

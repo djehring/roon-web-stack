@@ -75,6 +75,21 @@ body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
   }
 }
 
+.success-snackbar {
+  background: #4caf50;
+  color: white;
+}
+
+.error-snackbar {
+  background: #f44336;
+  color: white;
+}
+
+.info-snackbar {
+  background: #007BFF;
+  color: white;
+}
+
 ::ng-deep .mat-snack-bar-container.opaque-snackbar {
   background-color: #007BFF !important;  // Blue color
   color: white !important;

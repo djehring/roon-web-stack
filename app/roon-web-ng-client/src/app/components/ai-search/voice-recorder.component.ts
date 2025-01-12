@@ -4,6 +4,7 @@ import { Component, EventEmitter, inject, Output } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MatDialog } from "@angular/material/dialog";
 import { MatIconModule } from "@angular/material/icon";
+import { MessageService } from "@services/message.service";
 import { RoonService } from "@services/roon.service";
 import { MicrophoneSelectDialogComponent } from "./microphone-select-dialog.component";
 
@@ -15,12 +16,10 @@ import { MicrophoneSelectDialogComponent } from "./microphone-select-dialog.comp
     <button
       mat-icon-button
       [color]="isRecording ? 'warn' : 'primary'"
-      (click)="toggleRecording()"
       (touchstart)="startPress($event)"
-      (touchend)="endPress()"
+      (touchend)="endPress($event)"
       (mousedown)="startPress($event)"
-      (mouseup)="endPress()"
-      (mouseleave)="endPress()"
+      (mouseup)="endPress($event)"
       aria-label="Record voice input"
     >
       <mat-icon>{{ isRecording ? "stop" : "mic" }}</mat-icon>
@@ -41,6 +40,12 @@ export class VoiceRecorderComponent {
 
   private pressTimer?: number;
   private readonly LONG_PRESS_DURATION = 500; // 500ms for long press
+
+  private isLongPress = false;
+  private isToggling = false;
+  private isTouchDevice = false;
+
+  constructor(private readonly messageService: MessageService) {}
 
   async toggleRecording(): Promise<void> {
     if (this.isRecording) {
@@ -70,13 +75,14 @@ export class VoiceRecorderComponent {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 44100,
         },
       });
 
+      // Determine MIME type based on the user agent
+      const mimeType = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "audio/mp4" : "audio/webm; codecs=opus";
+
       this.mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm; codecs=opus",
+        mimeType,
         audioBitsPerSecond: 128000,
       });
 
@@ -92,26 +98,50 @@ export class VoiceRecorderComponent {
       this.mediaRecorder.start(100);
       this.isRecording = true;
     } catch (err) {
-      this.transcriptionComplete.emit(
-        `Error accessing microphone. Please check permissions: ${err instanceof Error ? err.message : String(err)}`
-      );
+      const message = /denied|not found/i.test(String(err))
+        ? "Microphone access was denied. Please check your browser settings and permissions."
+        : `Error accessing microphone: ${err instanceof Error ? err.message : String(err)}`;
+
+      this.transcriptionComplete.emit(message);
     }
   }
 
   private stopRecording(): void {
     if (this.mediaRecorder?.state === "recording") {
-      this.mediaRecorder.stop();
-      this.isRecording = false;
+      //this.messageService.showMessage("Stopping recording...");
 
-      // Stop all tracks in the stream
-      this.mediaRecorder.stream.getTracks().forEach((track) => {
-        track.stop();
-      });
+      try {
+        this.mediaRecorder.stop();
+        this.isRecording = false;
+
+        // Stop all tracks in the stream
+        this.mediaRecorder.stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+
+        //this.messageService.showSuccess("Recording stopped successfully");
+      } catch (err) {
+        this.messageService.showError("Error stopping recording", err as Error);
+        this.transcriptionComplete.emit(
+          "Error stopping recording: " + (err instanceof Error ? err.message : String(err))
+        );
+      }
+    } else {
+      this.messageService.showMessage(`MediaRecorder state: ${this.mediaRecorder?.state}`);
     }
   }
 
   private async handleRecordingComplete(): Promise<void> {
-    const audioBlob = new Blob(this.audioChunks, { type: "audio/webm; codecs=opus" });
+    // Use MP4 for iOS, WebM for others
+    const mimeType = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "audio/mp4" : "audio/webm; codecs=opus";
+
+    const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+
+    //if size < 44100 * 100ms, then we don't have any audio
+    if (audioBlob.size < 44100 * 0.1) {
+      this.transcriptionComplete.emit("No audio recorded");
+      return;
+    }
 
     // Emit loading state immediately
     this.transcriptionComplete.emit("Transcribing audio...");
@@ -120,22 +150,54 @@ export class VoiceRecorderComponent {
       const transcription = await this.roonService.transcribeAudio(audioBlob);
       this.transcriptionComplete.emit(transcription);
     } catch (err) {
-      this.transcriptionComplete.emit(
-        "Error transcribing audio: " + (err instanceof Error ? err.message : String(err))
-      );
+      this.messageService.showError("Transcription error", err as Error);
+      this.transcriptionComplete.emit("Error transcribing audio");
     }
   }
 
   startPress(event: Event): void {
-    event.preventDefault(); // Prevent default browser behavior
-    this.pressTimer = window.setTimeout(() => {
-      void this.showMicrophoneSelect();
-    }, this.LONG_PRESS_DURATION);
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Set device type on first interaction
+    if (event.type === "touchstart") {
+      this.isTouchDevice = true;
+    }
+
+    // Ignore mouse events on touch devices
+    if (this.isTouchDevice && event.type === "mousedown") {
+      return;
+    }
+
+    // Only start the timer if we're not already processing something
+    if (!this.isToggling && !this.pressTimer) {
+      this.isLongPress = false;
+      this.pressTimer = window.setTimeout(() => {
+        this.isLongPress = true;
+        void this.showMicrophoneSelect();
+      }, this.LONG_PRESS_DURATION);
+    }
   }
 
-  endPress(): void {
+  endPress(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Ignore mouse events on touch devices
+    if (this.isTouchDevice && event.type === "mouseup") {
+      return;
+    }
+
     if (this.pressTimer) {
       clearTimeout(this.pressTimer);
+      this.pressTimer = undefined; // Reset the timer
+
+      if (!this.isLongPress && !this.isToggling) {
+        this.isToggling = true;
+        void this.toggleRecording().finally(() => {
+          this.isToggling = false;
+        });
+      }
     }
   }
 

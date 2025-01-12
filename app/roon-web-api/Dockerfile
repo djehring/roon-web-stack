@@ -18,7 +18,7 @@ RUN mkdir /usr/src/app/config \
 ENV HOST=0.0.0.0
 COPY --from=builder /usr/local/bin/node /usr/local/bin/
 COPY --from=builder /usr/local/bin/docker-entrypoint.sh /usr/local/bin/
-COPY --from=builder /usr/src/roon-web-stack/.env /usr/src/app/.env
+COPY --from=builder /usr/src/roon-web-stack/.env.deploy /usr/src/app/.env
 ENTRYPOINT ["docker-entrypoint.sh"]
 RUN apk add --no-cache libstdc++ dumb-init
 COPY --from=builder /usr/src/roon-web-stack/LICENSE ./LICENSE
@@ -27,3 +27,15 @@ COPY --from=builder /usr/src/roon-web-stack/app/roon-web-api/bin/app.js ./app.js
 COPY --from=builder /usr/src/roon-web-stack/app/roon-web-ng-client/dist/roon-web-ng-client/browser ./web
 USER node
 CMD ["dumb-init", "node", "app.js"]
+
+# Add SSL files
+COPY ./certs/localhost+4.pem /etc/ssl/certs/localhost+4.pem
+COPY ./certs/localhost+4-key.pem /etc/ssl/private/localhost+4-key.pem
+
+# Set environment variables for SSL
+ENV SSL_CERT=/etc/ssl/certs/localhost+4.pem
+ENV SSL_KEY=/etc/ssl/private/localhost+4-key.pem
+ENV HTTPS=true
+
+# Expose HTTPS port
+EXPOSE 3443

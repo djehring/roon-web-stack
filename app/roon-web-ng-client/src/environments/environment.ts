@@ -1,4 +1,4 @@
 export const environment = {
   production: false,
-  apiUrl: "http://localhost:9876", // Default API URL for development
+  apiUrl: "http://localhost:3000/api", // HTTP in dev, proxied through dev server
 };
