@@ -1,4 +1,4 @@
-@use "../../styles/mixins" as nr;
+@use '../../styles/mixins' as nr;
 
 :host {
   .aisearch-dialog-title {
@@ -6,32 +6,29 @@
     justify-content: flex-start;
     align-items: center;
     padding-top: 24px;
+
     &.is-big-fonts {
       padding-bottom: 24px;
       @include nr.icon-button-size(48px, 36px, 6px);
       --mdc-filled-button-label-text-size: 24px;
       --mdc-filled-button-container-color: transparent;
+
       .mat-mdc-unelevated-button {
         padding: 26px;
       }
+
       > mat-icon {
         @include nr.mat-icon-size(48px);
       }
     }
   }
+
   mat-dialog-content {
     width: 100%;
     height: 100%;
     max-width: 100%;
     max-height: 100%;
     display: flex;
-    .loading-spinner {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
   }
 
   mat-dialog-actions {
@@ -47,7 +44,7 @@
   }
 
   .search-container {
-    flex-grow: 1; /* Allow search-container to take up space */
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -73,52 +70,179 @@
   }
 
   .results-container {
-    flex-grow: 1; /* Allow the container to take available space */
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Prevent scrolling on the container itself */
+    overflow: hidden;
     margin-bottom: 5px;
 
     mat-list {
       flex-grow: 1;
       overflow: auto;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      padding: 4px 0;
+      background: white;
+    }
+  }
+
+  .loading-spinner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .track-item {
+    cursor: pointer;
+    position: relative;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 0;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    height: auto !important;
+    min-height: 72px;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    &.cdk-drag-preview {
+      box-shadow: 
+        0 5px 5px -3px rgba(0, 0, 0, 0.2),
+        0 8px 10px 1px rgba(0, 0, 0, 0.14),
+        0 3px 14px 2px rgba(0, 0, 0, 0.12);
+    }
+
+    &.cdk-drag-placeholder {
+      opacity: 0;
+    }
+
+    &.cdk-drag-animating {
+      transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+  }
+
+  .track-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    width: 100%;
+    background: white;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    will-change: transform;
+    min-height: 72px;
+    box-sizing: border-box;
+
+    mat-icon[cdkDragHandle] {
+      color: rgba(0, 0, 0, 0.38);
+      cursor: move;
+    }
+  }
+
+  .delete-action {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    mat-icon {
+      color: #dc3545;
+      font-size: 24px;
+    }
+  }
+
+  .track-item.swiping {
+    .delete-action {
+      opacity: 1;
+    }
+
+    .track-content {
+      background-color: #fafafa;
+    }
+  }
+
+  .track-info {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    gap: 4px;
+    font-family: 'Roboto', sans-serif;
+    min-width: 0;
+  }
+
+  .track-title {
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(0, 0, 0, 0.87);
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track-details {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.6);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+
+    .track-artist {
+      flex-shrink: 0;
+    }
+
+    .track-separator {
+      flex-shrink: 0;
+      color: rgba(0, 0, 0, 0.38);
+    }
+
+    .track-album {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-style: italic;
+    }
+
+    @media (max-width: 600px) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      white-space: normal;
+
+      .track-separator {
+        display: none;
+      }
+
+      .track-album {
+        font-size: 13px;
+      }
     }
   }
 
   .no-results-container {
     text-align: center;
     margin-top: 20px;
+    color: rgba(0, 0, 0, 0.6);
+    font-family: 'Roboto', sans-serif;
   }
 
-  .track-info {
-    display: flex;
-    align-items: center; /* Aligns text vertically in the middle */
-    justify-content: space-between; /* Spreads out the text if needed */
-    gap: 4px; /* Adds spacing between the track and artist */
-    font-size: 16px; /* Adjust font size as needed */
-    color: #333; /* Adjust text color */
+  .cdk-drop-list-dragging .track-item:not(.cdk-drag-placeholder) {
+    transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
   }
-
-  .track-title {
-    font-weight: bold;
-    color: #000;
-  }
-
-  .track-artist {
-    font-style: italic;
-    color: #555;
-  }
-
-  .center-spinner {
-    margin: 20px auto;
-  }
-
-  .status-message {
-    text-align: center;
-    margin: 20px 0;
-  }
-
 }

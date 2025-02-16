@@ -1,62 +1,102 @@
-<div mat-dialog-title class="aisearch-dialog-title">
-  <h2>Search Roon Tracks</h2>
-</div>
+<h2 mat-dialog-title class="aisearch-dialog-title">AI Music Search</h2>
 
 <mat-dialog-content>
   <div class="search-container">
     <div class="search-input-container">
-      <mat-form-field appearance="fill" class="search-field">
-        <mat-label>Enter AI Prompt for tracks</mat-label>
-        <input matInput [(ngModel)]="searchQuery" (keyup.enter)="performSearch()" />
+      <mat-form-field class="search-field">
+        <mat-label>What would you like to listen to?</mat-label>
+        <input
+          matInput
+          [(ngModel)]="searchQuery"
+          (keyup.enter)="performSearch()"
+          [disabled]="transcribing"
+        />
       </mat-form-field>
-      <button mat-raised-button color="primary" (click)="performSearch()" class="search-button"
-              [disabled]="loading">
+      <nr-voice-recorder
+        (transcriptionComplete)="onTranscriptionComplete($event)"
+      ></nr-voice-recorder>
+      <button
+        mat-raised-button
+        color="primary"
+        class="search-button"
+        (click)="performSearch()"
+        [disabled]="!searchQuery.trim() || transcribing"
+      >
         Search
       </button>
     </div>
 
-    <!-- Show loading spinner during transcription or search -->
-    <mat-spinner *ngIf="loading || transcribing" diameter="40" class="center-spinner">
-    </mat-spinner>
+    <div class="results-container">
+      <!-- Loading Spinner -->
+      <div *ngIf="loading" class="loading-spinner">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
 
-    <!-- Status messages -->
-    <div class="status-message" *ngIf="transcribing">
-      Transcribing audio...
+      <!-- Results List -->
+      <mat-list
+        *ngIf="!loading && searchResults.length > 0"
+        cdkDropList
+        (cdkDropListDropped)="onDrop($event)"
+      >
+        <mat-list-item
+          *ngFor="let track of searchResults; let i = index"
+          cdkDrag
+          class="track-item"
+          [class.swiping]="track.swiping"
+          (touchstart)="onTouchStart($event, i)"
+          (touchmove)="onTouchMove($event, i)"
+          (touchend)="onTouchEnd($event, i)"
+          (wheel)="onWheel($event, i)"
+        >
+          <div class="delete-action">
+            <mat-icon>delete</mat-icon>
+          </div>
+          <div 
+            class="track-content" 
+            [style.transform]="'translateX(-' + (track.swipeAmount || 0) + 'px)'"
+          >
+            <mat-icon
+              cdkDragHandle
+              matTooltip="Drag to reorder"
+              aria-label="Drag handle"
+            >
+              drag_indicator
+            </mat-icon>
+            <div class="track-info">
+              <span class="track-title">{{ track.track }}</span>
+              <div class="track-details">
+                <span class="track-artist">{{ track.artist }}</span>
+                <span class="track-separator">•</span>
+                <span class="track-album">{{ track.album }}</span>
+              </div>
+            </div>
+          </div>
+        </mat-list-item>
+      </mat-list>
+
+      <!-- No Results Message -->
+      <div
+        *ngIf="!loading && searchResults.length === 0"
+        class="no-results-container"
+      >
+        <p>No tracks found. Try a different search query.</p>
+      </div>
     </div>
-
-    <div class="status-message" *ngIf="loading && !transcribing">
-      Searching...
-    </div>
-
-    <!-- Only show "No tracks" when not in any loading state and we have no results -->
-    <div class="status-message" 
-         *ngIf="!loading && !transcribing && searchResults.length === 0 && searchQuery">
-      No tracks found
-    </div>
-
-    <!-- Results list -->
-    <mat-list *ngIf="!loading && !transcribing && searchResults.length > 0">
-      <mat-list-item *ngFor="let result of searchResults">
-        <div class="track-info">
-          <span class="track-title">{{ result.track }}</span><span class="track-artist">{{ result.artist }}</span>
-        </div>
-      </mat-list-item>
-    </mat-list>
   </div>
 </mat-dialog-content>
 
 <mat-dialog-actions>
-  <nr-voice-recorder (transcriptionComplete)="onTranscriptionComplete($event)"></nr-voice-recorder>
   <div>
-    <button mat-button (click)="closeDialog()">Close</button>
+    <button mat-button (click)="closeDialog()">Cancel</button>
+  </div>
+  <div>
     <button
       mat-raised-button
       color="primary"
+      [disabled]="searchResults.length === 0"
       (click)="playTracks()"
-      *ngIf="searchResults.length > 0"
-      class="play-button"
     >
-      Play
+      Play Selected Tracks
     </button>
   </div>
 </mat-dialog-actions>
