@@ -10,6 +10,8 @@ import appRoute from "./route/app-route";
 // Load environment variables and handle errors
 const result = dotenv.config();
 if (result.error) {
+  // eslint-disable-next-line no-console
+  console.error("Error loading environment variables:", result.error);
   process.exit(1);
 }
 
@@ -45,7 +47,7 @@ const init = async (): Promise<void> => {
 
   try {
     await httpServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTP_PORT || "3000", 10) });
-    //await httpsServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTPS_PORT || "3443", 10) });
+    await httpsServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTPS_PORT || "3443", 10) });
 
     gracefulShutDownHttp.setReady();
     gracefulShutDownHttps.setReady();
@@ -61,7 +63,7 @@ const init = async (): Promise<void> => {
     }
 
     await httpServer.close();
-    //await httpsServer.close();
+    await httpsServer.close();
 
     process.exit(1);
   }
