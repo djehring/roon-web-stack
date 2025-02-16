@@ -113,6 +113,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
   server.post<{ Params: ClientIdParam; Body: ClientRoonApiBrowseOptions }>("/:client_id/browse", async (req, reply) => {
     const { client, badRequestReply } = getClient(req, reply);
     if (client) {
+      logger.debug("Client id: ", req.params.client_id);
       const browseResponse = await client.browse(req.body);
       return reply.status(200).send(browseResponse);
     } else {
@@ -250,6 +251,7 @@ const getClient = (
 } => {
   try {
     const client_id = req.params.client_id;
+    logger.debug({ client_id }, "Received request");
     return {
       client: clientManager.get(client_id),
     };

@@ -25,11 +25,17 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
     }
     const openaiInstance = getOpenAIInstance();
     const response = await openaiInstance.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `Provide a list of ***commercially available, officially released tracks*** for "${query}". Only include tracks ***known to exist on streaming platforms***. Each entry should consist of ***the artist and track name and album separated by a dash***, with a ***line return between each***. ***Avoid any extra details, decorations, brackets, or version information.***`,
+          content: `Provide a list of ***commercially available, officially released tracks*** for "${query}". 
+                    Only include tracks ***known to exist on streaming platforms***. 
+                    Each entry should consist of ***the artist and track name and album separated by a dash***, 
+                    with a ***line return between each***. 
+                    ***Avoid any extra details, decorations, brackets, or version information.***
+                    ***Ensure you return the track names as they are listed on streaming platforms.***
+                    ***DO NOT DUPLICATE TRACKS.***`,
         },
       ],
       max_tokens: 300, // Adjust as needed for response length
@@ -80,7 +86,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
   const openaiInstance = getOpenAIInstance();
   const response = await openaiInstance.chat.completions.create({
-    model: "gpt-4-turbo",
+    model: "gpt-4o-mini",
     messages: [
       {
         role: "system",

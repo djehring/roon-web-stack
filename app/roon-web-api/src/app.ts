@@ -45,7 +45,7 @@ const init = async (): Promise<void> => {
 
   try {
     await httpServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTP_PORT || "3000", 10) });
-    await httpsServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTPS_PORT || "3443", 10) });
+    //await httpsServer.listen({ host: hostInfo.host, port: parseInt(process.env.HTTPS_PORT || "3443", 10) });
 
     gracefulShutDownHttp.setReady();
     gracefulShutDownHttps.setReady();
@@ -61,7 +61,7 @@ const init = async (): Promise<void> => {
     }
 
     await httpServer.close();
-    await httpsServer.close();
+    //await httpsServer.close();
 
     process.exit(1);
   }
