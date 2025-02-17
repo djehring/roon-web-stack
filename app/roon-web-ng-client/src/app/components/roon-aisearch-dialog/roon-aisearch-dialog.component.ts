@@ -16,11 +16,6 @@ import { SuggestedTrack } from "@model";
 import { MessageService } from "@services/message.service";
 import { RoonService } from "@services/roon.service";
 
-interface TrackWithSwipe extends SuggestedTrack {
-  swiping?: boolean;
-  swipeAmount?: number;
-}
-
 @Component({
   selector: "nr-roon-aisearch-dialog",
   templateUrl: "./roon-aisearch-dialog.component.html",
@@ -49,14 +44,15 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
 
   protected searchQuery = "";
   protected loading = false;
-  protected searchResults: TrackWithSwipe[] = [];
+  protected searchResults: SuggestedTrack[] = [];
+  protected swipingStates: Map<number, { swiping: boolean; swipeAmount: number }> = new Map();
   protected transcribing = false;
-  protected swipeThreshold = 180; // Increased threshold for delete
-  protected readonly deleteWidth = 180; // Width of delete button
+  protected swipeThreshold = 180;
+  protected readonly deleteWidth = 180;
   private touchStart = 0;
   private currentSwipingIndex: number | null = null;
   private wheelAccumulator = 0;
-  private readonly wheelThreshold = 180; // Match touch threshold
+  private readonly wheelThreshold = 180;
   private wheelTimeout: number | null = null;
 
   private readonly roonService = inject(RoonService);
@@ -106,14 +102,11 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
     }
     this.loading = true;
     this.searchResults = [];
+    this.swipingStates.clear();
 
     this.roonService.aiSearch(this.searchQuery).subscribe({
       next: (result) => {
-        this.searchResults = result.items.map((item) => ({
-          ...item,
-          swiping: false,
-          swipeAmount: 0,
-        }));
+        this.searchResults = result.items;
         this.loading = false;
       },
       error: () => {
@@ -140,12 +133,13 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
     }
   }
 
-  public onDrop(event: CdkDragDrop<TrackWithSwipe[]>): void {
+  public onDrop(event: CdkDragDrop<SuggestedTrack[]>): void {
     moveItemInArray(this.searchResults, event.previousIndex, event.currentIndex);
   }
 
   public removeTrack(index: number): void {
     this.searchResults.splice(index, 1);
+    this.swipingStates.delete(index);
   }
 
   public onTouchStart(event: TouchEvent, index: number): void {
@@ -160,11 +154,12 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
     const isSwipingLeft = touchDelta > 0;
 
     if (isSwipingLeft) {
-      this.searchResults[index].swipeAmount = Math.min(touchDelta, this.deleteWidth);
-      this.searchResults[index].swiping = touchDelta > this.swipeThreshold * 0.6; // Show delete earlier than activation
+      this.swipingStates.set(index, {
+        swipeAmount: Math.min(touchDelta, this.deleteWidth),
+        swiping: touchDelta > this.swipeThreshold * 0.6,
+      });
     } else {
-      this.searchResults[index].swipeAmount = 0;
-      this.searchResults[index].swiping = false;
+      this.swipingStates.delete(index);
     }
   }
 
@@ -175,43 +170,41 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
     if (touchDelta > this.swipeThreshold) {
       this.removeTrack(index);
     } else {
-      this.searchResults[index].swipeAmount = 0;
-      this.searchResults[index].swiping = false;
+      this.swipingStates.delete(index);
     }
     this.currentSwipingIndex = null;
   }
 
   public onWheel(event: WheelEvent, index: number): void {
-    // Only handle horizontal scrolling with two fingers
     if (!event.deltaX || Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       return;
     }
 
     event.preventDefault();
-
-    // Accumulate the wheel delta
     this.wheelAccumulator += event.deltaX;
 
-    // Update the visual swipe amount
     const swipeAmount = Math.min(Math.max(this.wheelAccumulator, 0), this.deleteWidth);
-    this.searchResults[index].swipeAmount = swipeAmount;
-    this.searchResults[index].swiping = swipeAmount > this.swipeThreshold * 0.6; // Show delete earlier than activation
+    this.swipingStates.set(index, {
+      swipeAmount,
+      swiping: swipeAmount > this.swipeThreshold * 0.6,
+    });
 
-    // Clear any existing timeout
     if (this.wheelTimeout !== null) {
       window.clearTimeout(this.wheelTimeout);
     }
 
-    // Set a timeout to reset or trigger delete
     this.wheelTimeout = window.setTimeout(() => {
       if (this.wheelAccumulator > this.wheelThreshold) {
         this.removeTrack(index);
       } else {
-        this.searchResults[index].swipeAmount = 0;
-        this.searchResults[index].swiping = false;
+        this.swipingStates.delete(index);
       }
       this.wheelAccumulator = 0;
       this.wheelTimeout = null;
     }, 150);
+  }
+
+  protected getSwipingState(index: number): { swiping: boolean; swipeAmount: number } {
+    return this.swipingStates.get(index) || { swiping: false, swipeAmount: 0 };
   }
 }

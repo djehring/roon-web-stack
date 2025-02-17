@@ -50,7 +50,7 @@
           *ngFor="let track of searchResults; let i = index"
           cdkDrag
           class="track-item"
-          [class.swiping]="track.swiping"
+          [class.swiping]="getSwipingState(i).swiping"
           (touchstart)="onTouchStart($event, i)"
           (touchmove)="onTouchMove($event, i)"
           (touchend)="onTouchEnd($event, i)"
@@ -61,7 +61,7 @@
           </div>
           <div 
             class="track-content" 
-            [style.transform]="'translateX(-' + (track.swipeAmount || 0) + 'px)'"
+            [style.transform]="'translateX(-' + (getSwipingState(i).swipeAmount || 0) + 'px)'"
           >
             <mat-icon
               cdkDragHandle
