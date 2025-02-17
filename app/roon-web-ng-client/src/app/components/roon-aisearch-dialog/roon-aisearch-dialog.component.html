@@ -11,10 +11,18 @@
           (keyup.enter)="performSearch()"
           [disabled]="transcribing"
         />
+        <button
+          *ngIf="searchQuery"
+          matSuffix
+          mat-icon-button
+          aria-label="Clear"
+          (click)="clearSearch()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
       </mat-form-field>
-      <nr-voice-recorder
-        (transcriptionComplete)="onTranscriptionComplete($event)"
-      ></nr-voice-recorder>
+    </div>
+    <div class="search-button-wrapper">
       <button
         mat-raised-button
         color="primary"
@@ -85,11 +93,14 @@
   </div>
 </mat-dialog-content>
 
-<mat-dialog-actions>
-  <div>
-    <button mat-button (click)="closeDialog()">Cancel</button>
+<mat-dialog-actions align="end">
+  <div class="left-actions">
+    <nr-voice-recorder
+      (transcriptionComplete)="onTranscriptionComplete($event)"
+    ></nr-voice-recorder>
   </div>
-  <div>
+  <div class="right-actions">
+    <button mat-button (click)="closeDialog()">Cancel</button>
     <button
       mat-raised-button
       color="primary"

@@ -63,7 +63,10 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
   private readonly messageService = inject(MessageService);
   private readonly dialog = inject(MatDialog);
 
-  constructor(protected readonly dialogRef: MatDialogRef<RoonAISearchDialogComponent>) {}
+  constructor(protected readonly dialogRef: MatDialogRef<RoonAISearchDialogComponent>) {
+    this.dialogRef.addPanelClass("ai-search-dialog");
+    this.dialogRef.updateSize("600px", "80vh");
+  }
 
   public ngAfterViewInit(): void {
     setTimeout(() => {
@@ -91,6 +94,10 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
 
   public closeDialog(): void {
     this.dialogRef.close();
+  }
+
+  public clearSearch(): void {
+    this.searchQuery = "";
   }
 
   public performSearch(): void {
