@@ -78,11 +78,26 @@ export class VoiceRecorderComponent {
         },
       });
 
-      // Determine MIME type based on the user agent
-      const mimeType = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "audio/mp4" : "audio/webm; codecs=opus";
+      // Try different MIME types in order of preference
+      const mimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/ogg",
+        "audio/mp4",
+        "", // Empty string lets browser pick its preferred format
+      ];
+
+      let selectedMimeType = "";
+      for (const type of mimeTypes) {
+        if (type === "" || MediaRecorder.isTypeSupported(type)) {
+          selectedMimeType = type;
+          break;
+        }
+      }
 
       this.mediaRecorder = new MediaRecorder(stream, {
-        mimeType,
+        mimeType: selectedMimeType || undefined,
         audioBitsPerSecond: 128000,
       });
 
@@ -132,9 +147,7 @@ export class VoiceRecorderComponent {
   }
 
   private async handleRecordingComplete(): Promise<void> {
-    // Use MP4 for iOS, WebM for others
-    const mimeType = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "audio/mp4" : "audio/webm; codecs=opus";
-
+    const mimeType = this.mediaRecorder?.mimeType || "audio/webm;codecs=opus";
     const audioBlob = new Blob(this.audioChunks, { type: mimeType });
 
     //if size < 44100 * 100ms, then we don't have any audio
