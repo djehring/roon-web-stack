@@ -29,5 +29,20 @@ module.exports = {
     cert
   },
   // Enable HTTPS for the dev server
-  protocol: 'https'
+  protocol: 'https',
+  '/assets/favicons/*.svg': {
+    headers: {
+      'Content-Type': 'image/svg+xml'
+    }
+  },
+  '/assets/favicons/*.png': {
+    headers: {
+      'Content-Type': 'image/png'
+    }
+  },
+  '/assets/favicons/*.ico': {
+    headers: {
+      'Content-Type': 'image/x-icon'
+    }
+  }
 }; 

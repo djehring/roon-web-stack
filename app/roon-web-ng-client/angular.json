@@ -32,7 +32,12 @@
             ],
             "tsConfig": "tsconfig.app.json",
             "assets": [
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "**/*",
+                "input": "src/assets/favicons",
+                "output": "/assets/favicons"
+              }
             ],
             "styles": [
               "src/styles.scss"

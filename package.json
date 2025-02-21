@@ -29,7 +29,9 @@
     "jest": "yarn workspaces foreach -At run jest",
     "build:nas": "./scripts/build-nas-image.sh",
     "deploy:nas": "./scripts/deploy-nas.sh",
-    "patch.all": "yarn workspaces foreach --all version patch"
+    "patch.all": "yarn workspaces foreach --all version patch",
+    "generate-favicons": "node scripts/generate-favicons.js",
+    "generate-test-icons": "node scripts/generate-test-icons.js"
   },
   "resolutions": {
     "punycode": "^2.3.1"
@@ -37,5 +39,14 @@
   "packageManager": "yarn@4.5.3+sha512.3003a14012e2987072d244c720506549c1aab73ee728208f1b2580a9fd67b92d61ba6b08fe93f6dce68fd771e3af1e59a0afa28dd242dd0940d73b95fedd4e90",
   "dependencies": {
     "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@angular/pwa": "^19.1.8",
+    "@types/potrace": "^2",
+    "@types/to-ico": "^1",
+    "potrace": "^2.1.8",
+    "sharp": "^0.33.2",
+    "svgo": "^3.3.2",
+    "to-ico": "^1.1.5"
   }
 }

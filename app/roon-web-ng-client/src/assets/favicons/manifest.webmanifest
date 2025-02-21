@@ -1,43 +1,16 @@
 {
-	"name": "roon-web-client",
+  "name": "Roon AI",
+  "short_name": "Roon AI",
+  "theme_color": "#000000",
+  "background_color": "#000000",
   "display": "standalone",
-  "start_url": "/",
-	"icons": [
-		{
-			"src": "/assets/favicons/favicon-36.png",
-			"sizes": "36x36",
-			"type": "image/png",
-			"density": 0.75
-		},
-		{
-			"src": "/assets/favicons/favicon-48.png",
-			"sizes": "48x48",
-			"type": "image/png",
-			"density": 1
-		},
-		{
-			"src": "/assets/favicons/favicon-72.png",
-			"sizes": "72x72",
-			"type": "image/png",
-			"density": 1.5
-		},
-		{
-			"src": "/assets/favicons/favicon-96.png",
-			"sizes": "96x96",
-			"type": "image/png",
-			"density": 2
-		},
-		{
-			"src": "/assets/favicons/favicon-144-precomposed.png",
-			"sizes": "144x144",
-			"type": "image/png",
-			"density": 3
-		},
-		{
-			"src": "/assets/favicons/favicon-192.png",
-			"sizes": "192x192",
-			"type": "image/png",
-			"density": 4
-		}
-	]
+  "scope": "./",
+  "start_url": "./",
+  "icons": [
+    { "src": "favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "favicon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "favicon-180-precomposed.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "favicon-152-precomposed.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "favicon-120-precomposed.png", "sizes": "120x120", "type": "image/png" }
+  ]
 }
