@@ -7,9 +7,12 @@
         <mat-label>What would you like to listen to?</mat-label>
         <input
           matInput
+          type="text"
+          inputmode="text"
           [(ngModel)]="searchQuery"
           (keyup.enter)="performSearch()"
           [disabled]="transcribing"
+          #searchInput
         />
         <button
           *ngIf="searchQuery"
