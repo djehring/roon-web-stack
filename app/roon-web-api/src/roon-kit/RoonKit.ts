@@ -11,6 +11,7 @@ import {
   SettingsValues,
   SettingsLayout,
 } from "@model";
+import { logger } from "@infrastructure";
 
 /**
  * Shared types and functions.
@@ -134,11 +135,47 @@ function proxyBrowse(browse: RoonApiBrowse): RoonApiBrowse {
         case "load":
           const fn = v as Function;
           v = (...args: any[]) => {
+            // Enhanced logging for browse/load calls
+            const options = args[0] || {};
+            logger.debug({
+              method: p,
+              options: {
+                hierarchy: options.hierarchy,
+                item_key: options.item_key,
+                input: options.input,
+                pop_all: options.pop_all,
+                refresh_list: options.refresh_list,
+                multi_session_key: options.multi_session_key,
+                level: options.level,
+                offset: options.offset,
+                count: options.count,
+                zone_or_output_id: options.zone_or_output_id
+              }
+            }, `RoonApiBrowse.${p} called with options`);
+            
             return new Promise((resolve, reject) => {
               args.push((err: string | false, body: any) => {
                 if (err) {
+                  logger.error({ 
+                    method: p, 
+                    error: err,
+                    options: args[0]
+                  }, `RoonApiBrowse.${p} failed`);
                   reject(err);
                 } else {
+                  logger.debug({ 
+                    method: p,
+                    responseType: body?.action,
+                    listLevel: body?.list?.level,
+                    listCount: body?.list?.count,
+                    itemCount: body?.items?.length,
+                    items: body?.items?.map((item: any) => ({
+                      title: item.title,
+                      subtitle: item.subtitle,
+                      hint: item.hint,
+                      item_key: item.item_key
+                    }))
+                  }, `RoonApiBrowse.${p} succeeded`);
                   resolve(body);
                 }
               });
@@ -161,12 +198,23 @@ function proxyImage(image: RoonApiImage): RoonApiImage {
         case "get_image":
           const fn = v as Function;
           v = (...args: any[]) => {
+            logger.debug({
+              method: p,
+              imageKey: args[0]
+            }, `RoonApiImage.${p} called`);
+            
             return new Promise((resolve, reject) => {
               args.push(
                 (err: string | false, content_type: string, image: Buffer) => {
                   if (err) {
+                    logger.error({ method: p, error: err }, `RoonApiImage.${p} failed`);
                     reject(err);
                   } else {
+                    logger.debug({ 
+                      method: p,
+                      contentType: content_type,
+                      imageSize: image.length
+                    }, `RoonApiImage.${p} succeeded`);
                     resolve({ content_type, image });
                   }
                 }
@@ -203,11 +251,34 @@ function proxyTransport(transport: RoonApiTransport): RoonApiTransport {
         case "ungroup_outputs":
           fn = v;
           v = (...args: any[]) => {
+            // Enhanced logging for transport control calls
+            const options = args[0] || {};
+            logger.debug({
+              method: p,
+              options: {
+                zone_id: options.zone_id,
+                zone_or_output_id: options.zone_or_output_id,
+                cmd: options.cmd,
+                item_key: options.item_key,
+                seek_position: options.seek_position,
+                volume: options.volume
+              }
+            }, `RoonApiTransport.${p} called with options`);
+            
             return new Promise<void>((resolve, reject) => {
               args.push((err: string | false) => {
                 if (err) {
+                  logger.error({ 
+                    method: p, 
+                    error: err,
+                    options: args[0]
+                  }, `RoonApiTransport.${p} failed`);
                   reject(err);
                 } else {
+                  logger.debug({ 
+                    method: p,
+                    success: true
+                  }, `RoonApiTransport.${p} succeeded`);
                   resolve();
                 }
               });
@@ -220,11 +291,33 @@ function proxyTransport(transport: RoonApiTransport): RoonApiTransport {
         case "play_from_here":
           fn = v;
           v = (...args: any[]) => {
+            // Enhanced logging for transport query calls
+            const options = args[0] || {};
+            logger.debug({
+              method: p,
+              options: {
+                zone_id: options.zone_id,
+                zone_or_output_id: options.zone_or_output_id,
+                output_id: options.output_id
+              }
+            }, `RoonApiTransport.${p} called with options`);
+            
             return new Promise((resolve, reject) => {
               args.push((err: string | false, body: any) => {
                 if (err) {
+                  logger.error({ 
+                    method: p, 
+                    error: err,
+                    options: args[0]
+                  }, `RoonApiTransport.${p} failed`);
                   reject(err);
                 } else {
+                  logger.debug({ 
+                    method: p,
+                    responseType: typeof body,
+                    itemCount: Array.isArray(body) ? body.length : undefined,
+                    response: body
+                  }, `RoonApiTransport.${p} succeeded`);
                   resolve(body);
                 }
               });
