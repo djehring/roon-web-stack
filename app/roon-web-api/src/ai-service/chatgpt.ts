@@ -17,6 +17,44 @@ function getOpenAIInstance(): OpenAI {
   return openai;
 }
 
+function parseTrack(line: string): Track | null {
+  const parts = line.split(" - ");
+  if (parts.length < 2) {
+    logger.warn("Invalid line format (needs at least artist - track):", line);
+    return null;
+  }
+  const [artist, track, album] = parts;
+  if (!artist || !track) {
+    logger.warn("Missing artist or track:", line);
+    return null;
+  }
+  return {
+    artist: artist.trim(),
+    track: track.trim(),
+    album: album ? album.trim() : "",
+  };
+}
+
+function parseTracks(messageContent: string): Track[] {
+  if (!messageContent.trim()) {
+    logger.error("Empty or invalid message content");
+    return [];
+  }
+
+  // If there are newlines, treat as multiple tracks
+  if (messageContent.includes("\n")) {
+    return messageContent
+      .trim()
+      .split("\n")
+      .map(parseTrack)
+      .filter((track): track is Track => track !== null);
+  }
+
+  // Single track case
+  const track = parseTrack(messageContent.trim());
+  return track ? [track] : [];
+}
+
 export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
   try {
     //throw error if query empty
@@ -35,7 +73,11 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
                     with a ***line return between each***. 
                     ***Avoid any extra details, decorations, brackets, or version information.***
                     ***Ensure you return the track names as they are listed on streaming platforms.***
-                    ***DO NOT DUPLICATE TRACKS. FIND THE COMMONEST ALBUM RATHER THAN RETURNING MULTIPLE VERSIONS OF THE SAME TRACK ON DIFFERENT ALBUMS.***`,
+                    ***USE THE EXACT ALBUM NAME AS IT APPEARS ON STREAMING PLATFORMS***
+                    ***ENSURE THE TRACK IS ON THE ALBUM IN UK RELEASED ALBUMS***
+                    ***AVOID ALBUMS CALLED "Greatest Hits" or "20 Greatest Hits", "Ultimate Collection" or similar unless specifically asked for or the on;y album that matches***
+                    *** UNLESS SPECIFICALLY ASKED ONLY RETURN EACH TRACK ONCE ON THE BEST SELLING ALBUM IT WAS TELEASED ON In THE UK***
+                    ***IF THE SEARCH IS FOR A SINGLE TRACK (e.g. Virginia Plain by Bryan Ferry) THEN ONLY RETURN ONE ITEM WHICH IS THE BEST SELLING UK ALBUM CONTAINING THE TRACK***`,
         },
       ],
       max_tokens: 300, // Adjust as needed for response length
@@ -52,28 +94,12 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
       return [];
     }
 
-    let tracks: Track[] = [];
-
-    // Check if the response contains newline characters
-    if (messageContent.includes("\n")) {
-      tracks = messageContent
-        .trim()
-        .split("\n")
-        .map((line) => {
-          const [artist, track, album] = line.split(" - ");
-          if (!artist || !track) {
-            logger.warn("Invalid line format:", line);
-            return null;
-          }
-          return { artist: artist.trim(), track: track.trim(), album: album.trim() };
-        })
-        .filter((track) => track !== null) as Track[]; // Remove null entries
-    } else {
-      logger.error("No newline characters found in the response. Response:", messageContent);
-    }
+    const tracks = parseTracks(messageContent);
 
     if (tracks.length === 0) {
       logger.error("No tracks found in the response:", messageContent);
+    } else {
+      logger.debug("Successfully parsed tracks:", tracks);
     }
 
     return tracks;

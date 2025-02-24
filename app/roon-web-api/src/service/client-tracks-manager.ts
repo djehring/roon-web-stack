@@ -23,8 +23,19 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
   logger.debug({ len, startPlay }, "Starting track search");
   logger.debug("Received tracks to play:", tracks);
 
+  if (!tracks.length) {
+    logger.error("No tracks provided to findTracksInRoon");
+    return [];
+  }
+
   for (const track of tracks) {
     try {
+      if (!track.artist || !track.track) {
+        logger.error("Invalid track data:", track);
+        unmatchedTracks.push(track);
+        continue;
+      }
+
       logger.debug({ track, startPlay }, "Processing track");
       await resetBrowseSession(browseOptions.multi_session_key);
 
@@ -32,10 +43,15 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
       const foundTrack = await findTrackByAlbum(track, browseOptions);
       if (foundTrack) {
         logger.debug(`Found track via album search: ${foundTrack.title}`);
-        // Use album-specific playback for tracks found via album search
-        await playAlbumTrack(foundTrack, browseOptions, startPlay);
-        startPlay = false;
-        continue;
+        try {
+          // Use album-specific playback for tracks found via album search
+          await playAlbumTrack(foundTrack, browseOptions, startPlay);
+          startPlay = false;
+          continue;
+        } catch (error) {
+          logger.error(`Error playing album track ${track.track}: ${JSON.stringify(error)}`);
+          // Fall through to direct search if playback fails
+        }
       }
 
       // If album search fails, try direct search as fallback
@@ -53,6 +69,10 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
       logger.error(`Error processing track ${track.artist} - ${track.track}: ${JSON.stringify(error)}`);
       unmatchedTracks.push(track);
     }
+  }
+
+  if (unmatchedTracks.length > 0) {
+    logger.error("Some tracks were not found:", unmatchedTracks);
   }
 
   return unmatchedTracks;
@@ -260,18 +280,31 @@ function normalizeString(str: string): string {
   if (!str) return "";
   return str
     .toLowerCase()
+    .normalize("NFKD") // Decompose accented characters
+    .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
     .replace(/\s*&\s*/g, " and ")
     .replace(/['']/g, "'")
     .replace(/[""]/g, '"')
     .replace(/\s*\([^)]*(?:version|mix|edit|remix|remaster|remastered|mono|stereo)\)[^)]*\)?/gi, "") // Remove version decorations
     .replace(/\s*\[.*?\]/g, "") // Remove content in square brackets
-    .replace(/\s*-\s*/g, " ") // Normalize dashes
-    .replace(/[^\w\s'"-:,]/g, "") // Keep only word chars, spaces, quotes, dashes, colons, and commas
+    .replace(/\s*[:-]\s*/g, " ") // Normalize both colons and dashes to spaces
+    .replace(/[^\w\s'"-]/g, "") // Keep only word chars, spaces, quotes, and dashes
     .replace(/\s+/g, " ") // Normalize spaces
-    .replace(/:\s*/g, " ") // Normalize colons to spaces
-    .replace(/,\s*/g, " ") // Normalize commas to spaces
+    .replace(/greatest/g, "great") // Normalize "greatest" to "great"
     .replace(/^\d+\s*/, "") // Remove leading track numbers
     .trim();
+}
+
+function normalizeArtistName(name: string): string {
+  const normalized = normalizeString(name)
+    .replace(/stephan/g, "stephane") // Handle common name variations
+    .replace(/steven/g, "stephen");
+
+  // Split on commas and 'and' to handle collaborations
+  const parts = normalized.split(/,|\band\b/).map((p) => p.trim());
+
+  // For collaborations, return all parts. For single artists, return as is
+  return parts.length > 1 ? parts.join(" ") : normalized;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -287,6 +320,9 @@ async function searchAndLoadAlbum(
     albumName.replace(/^the piano magic of/i, "").trim(),
     // Add artist name only
     albumName.replace(/^.*?of\s+/i, "").trim(),
+    // Add variations with different separators
+    albumName.replace(/:/g, "-"),
+    albumName.replace(/-/g, ":"),
   ];
 
   logger.debug("Trying album variations:", searchVariations);
@@ -342,29 +378,58 @@ async function searchAndLoadAlbum(
           }))
         );
 
-        // Try to find the album with more flexible matching
-        const albumMatch = albumsLoadResponse.items.find((item) => {
+        // First try exact match
+        const normalizedSearchAlbum = normalizeString(albumName);
+        let albumMatch = albumsLoadResponse.items.find((item) => {
           const normalizedTitle = normalizeString(item.title);
-          const normalizedAlbum = normalizeString(albumName);
-
-          // Create variations of the album title
-          const albumVariations = [
-            normalizedAlbum,
-            normalizedAlbum.replace(/^the\s+/i, ""),
-            normalizedAlbum.replace(/^the best of\s+/i, ""),
-            normalizedAlbum.replace(/^the very best of\s+/i, ""),
-            normalizedAlbum.replace(/^the piano magic of\s+/i, ""),
-            normalizedAlbum.replace(/^.*?of\s+/i, ""),
-          ];
-
-          // Try matching against all variations
-          return albumVariations.some(
-            (variation) =>
-              normalizedTitle === variation ||
-              normalizedTitle.includes(variation) ||
-              variation.includes(normalizedTitle)
-          );
+          // Compare normalized strings that will handle variations like : vs - and greatest vs great
+          return normalizedTitle === normalizedSearchAlbum;
         });
+
+        // If no exact match, try more flexible matching
+        if (!albumMatch) {
+          logger.debug("No exact album match found, trying flexible match");
+          albumMatch = albumsLoadResponse.items.find((item) => {
+            if (!item.subtitle) return false;
+
+            const normalizedTitle = normalizeString(item.title);
+            const normalizedSearchTitle = normalizeString(albumName);
+
+            // Split into words and remove common words
+            const searchWords = normalizedSearchTitle
+              .split(/\s+/)
+              .filter((word) => !["the", "of", "and", "by", "with"].includes(word));
+            const titleWords = normalizedTitle
+              .split(/\s+/)
+              .filter((word) => !["the", "of", "and", "by", "with"].includes(word));
+
+            // Calculate word match ratio
+            const matchingWords = searchWords.filter((word) =>
+              titleWords.some(
+                (titleWord) =>
+                  titleWord === word || titleWord.replace(/greatest/g, "great") === word.replace(/greatest/g, "great")
+              )
+            );
+
+            const matchRatio = matchingWords.length / Math.max(searchWords.length, titleWords.length);
+
+            // Consider it a match if we have a high ratio of matching words
+            const isGoodMatch = matchRatio >= 0.7;
+
+            if (isGoodMatch) {
+              logger.debug("Found flexible match:", {
+                searchTitle: albumName,
+                matchedTitle: item.title,
+                matchRatio,
+                matchingWords,
+                searchWords,
+                titleWords,
+              });
+            }
+
+            return isGoodMatch;
+          });
+        }
 
         if (albumMatch) {
           logger.debug(`Found matching album: ${albumMatch.title}`);
@@ -644,71 +709,81 @@ async function findTrackInSearchResults(
   startPlay: boolean
 ): Promise<boolean> {
   logger.debug({ track, startPlay }, "Searching for track");
-  const searchResponse = await performSearch(track, browseOptions);
+  try {
+    const searchResponse = await performSearch(track, browseOptions);
 
-  if (searchResponse.action !== "list" || !searchResponse.list) {
-    logger.debug(`No search results found for: ${track.artist} - ${track.track}`);
-    return false;
-  }
-
-  const loadResponse = await loadSearchResults(browseOptions.multi_session_key);
-  logger.debug({ items: loadResponse.items }, "Search results loaded");
-
-  // First check for direct matches in action_list items
-  const directMatch = loadResponse.items.find((item) => {
-    if (item.hint !== "action_list") return false;
-
-    const titleMatch = normalizeString(item.title).includes(normalizeString(track.track));
-    if (!titleMatch) return false;
-
-    // Handle artist name variations more strictly
-    if (!item.subtitle) return false;
-    const artistParts = normalizeString(track.artist)
-      .split(" and ")
-      .map((p) => p.trim());
-    const itemArtistParts = normalizeString(item.subtitle)
-      .split(/,|\band\b/)
-      .map((p) => p.trim());
-
-    // Require at least one artist part to match exactly
-    return artistParts.some((artistPart) =>
-      itemArtistParts.some(
-        (itemArtistPart) =>
-          itemArtistPart === artistPart || itemArtistPart.includes(artistPart) || artistPart.includes(itemArtistPart)
-      )
-    );
-  });
-
-  if (directMatch) {
-    logger.debug(`Found direct match: ${directMatch.title} by ${directMatch.subtitle}`);
-    try {
-      await queueSingleTrack(
-        {
-          title: directMatch.title,
-          artist: directMatch.subtitle ?? "",
-          image: directMatch.image_key ?? "",
-          itemKey: directMatch.item_key ?? "",
-          zoneId: browseOptions.zone_or_output_id ?? "",
-        },
-        browseOptions,
-        startPlay
-      );
-      return true;
-    } catch (error) {
-      logger.error(`Error queueing track ${track.track}: ${JSON.stringify(error)}`);
+    if (searchResponse.action !== "list" || !searchResponse.list) {
+      logger.debug(`No search results found for: ${track.artist} - ${track.track}`);
       return false;
     }
-  }
 
-  // If no direct match, try finding in Tracks section
-  const tracksItem = loadResponse.items.find((item) => item.title === "Tracks" && item.hint === "list");
+    const loadResponse = await loadSearchResults(browseOptions.multi_session_key);
+    if (!loadResponse.items.length) {
+      logger.error("Invalid load response:", loadResponse);
+      return false;
+    }
 
-  if (!tracksItem) {
-    logger.debug(`No 'Tracks' section found for: ${track.artist} - ${track.track}`);
+    logger.debug({ items: loadResponse.items }, "Search results loaded");
+
+    // First check for direct matches in action_list items
+    const directMatch = loadResponse.items.find((item) => {
+      if (!item.hint || item.hint !== "action_list") return false;
+
+      const titleMatch = normalizeString(item.title).includes(normalizeString(track.track));
+      if (!titleMatch) return false;
+
+      // Handle artist name variations more strictly
+      if (!item.subtitle) return false;
+      const artistParts = normalizeArtistName(track.artist)
+        .split(" and ")
+        .map((p) => p.trim());
+      const itemArtistParts = normalizeArtistName(item.subtitle)
+        .split(/,|\band\b/)
+        .map((p) => p.trim());
+
+      // Require at least one artist part to match exactly
+      return artistParts.some((artistPart) =>
+        itemArtistParts.some(
+          (itemArtistPart) =>
+            itemArtistPart === artistPart || itemArtistPart.includes(artistPart) || artistPart.includes(itemArtistPart)
+        )
+      );
+    });
+
+    if (directMatch) {
+      logger.debug(`Found direct match: ${directMatch.title} by ${directMatch.subtitle}`);
+      try {
+        await queueSingleTrack(
+          {
+            title: directMatch.title,
+            artist: directMatch.subtitle ?? "",
+            image: directMatch.image_key ?? "",
+            itemKey: directMatch.item_key ?? "",
+            zoneId: browseOptions.zone_or_output_id ?? "",
+          },
+          browseOptions,
+          startPlay
+        );
+        return true;
+      } catch (error) {
+        logger.error(`Error queueing track ${track.track}: ${JSON.stringify(error)}`);
+        return false;
+      }
+    }
+
+    // If no direct match, try finding in Tracks section
+    const tracksItem = loadResponse.items.find((item) => item.title === "Tracks" && item.hint === "list");
+
+    if (!tracksItem) {
+      logger.debug(`No 'Tracks' section found for: ${track.artist} - ${track.track}`);
+      return false;
+    }
+
+    return await processTracksItem(track, tracksItem, browseOptions, startPlay);
+  } catch (error) {
+    logger.error(`Error in findTrackInSearchResults for ${track.track}: ${JSON.stringify(error)}`);
     return false;
   }
-
-  return processTracksItem(track, tracksItem, browseOptions, startPlay);
 }
 
 async function processTracksItem(
@@ -791,12 +866,17 @@ function findExactMatchingTrack(items: Item[], track: Track): Item | undefined {
 
     const normalizedItemTitle = normalizeString(item.title);
     const normalizedTrackTitle = normalizeString(track.track);
-    const normalizedItemArtist = normalizeString(item.subtitle);
-    const normalizedTrackArtist = normalizeString(track.artist);
+    const normalizedItemArtist = normalizeArtistName(item.subtitle);
+    const normalizedTrackArtist = normalizeArtistName(track.artist);
+
+    // First check if the requested artist is in the subtitle
+    if (!normalizedItemArtist.includes(normalizedTrackArtist)) {
+      return false;
+    }
 
     // For theme music, require stricter matching
     if (normalizedTrackTitle.includes("theme")) {
-      return normalizedItemTitle === normalizedTrackTitle && normalizedItemArtist.includes(normalizedTrackArtist);
+      return normalizedItemTitle === normalizedTrackTitle;
     }
 
     // Extract key signature if present
@@ -812,18 +892,11 @@ function findExactMatchingTrack(items: Item[], track: Track): Item | undefined {
     const [composerPart, ...titleParts] = normalizedTrackTitle.split(":");
     const mainTitle = titleParts.join(" ").trim() || composerPart;
 
-    // Split artist names and check if all parts match
-    const artistParts = normalizedTrackArtist.split(" and ");
-    const artistMatch = artistParts.every((part) => normalizedItemArtist.includes(normalizeString(part)));
-
-    // For classical music, check if composer is in subtitle
-    const composerMatch = titleParts.length > 0 ? normalizedItemArtist.includes(normalizeString(composerPart)) : true;
-
     // Clean and compare titles
     const cleanItemTitle = cleanClassicalTitle(normalizedItemTitle);
     const cleanTrackTitle = cleanClassicalTitle(mainTitle);
 
-    return cleanItemTitle === cleanTrackTitle && (artistMatch || composerMatch);
+    return cleanItemTitle === cleanTrackTitle;
   });
 }
 
@@ -838,136 +911,79 @@ function findMatchingTrack(items: Item[], track: Track): Item | undefined {
     }))
   );
 
-  for (const item of items) {
-    if (!item.subtitle) continue;
+  const normalizedTrackArtist = normalizeArtistName(track.artist);
+  logger.debug(`Looking for artist: ${track.artist} (normalized: ${normalizedTrackArtist})`);
 
-    const normalizedItemTitle = normalizeString(item.title);
+  // First try to find tracks by the exact artist (not collaborations)
+  const exactArtistMatches = items.filter((item) => {
+    if (!item.subtitle) return false;
+
+    const normalizedItemArtist = normalizeArtistName(item.subtitle);
+    logger.debug(`Comparing with: ${item.subtitle} (normalized: ${normalizedItemArtist})`);
+
+    // For exact matches, prefer items where the artist appears alone
+    const itemParts = normalizedItemArtist.split(/\s+/);
+    const isExactMatch = itemParts.length === 1 && itemParts[0] === normalizedTrackArtist;
+
+    if (isExactMatch) {
+      logger.debug(`Found exact artist match: ${item.subtitle}`);
+    }
+    return isExactMatch;
+  });
+
+  // If no exact matches, try more flexible matching including collaborations
+  const flexibleMatches =
+    exactArtistMatches.length > 0
+      ? exactArtistMatches
+      : items.filter((item) => {
+          if (!item.subtitle) return false;
+
+          const normalizedItemArtist = normalizeArtistName(item.subtitle);
+
+          // Check if the normalized track artist appears in the normalized item artist
+          const isMatch = normalizedItemArtist.includes(normalizedTrackArtist);
+
+          if (isMatch) {
+            logger.debug(`Found flexible artist match: ${item.subtitle}`);
+          }
+          return isMatch;
+        });
+
+  logger.debug(
+    `Found ${flexibleMatches.length} artist matches:`,
+    flexibleMatches.map((item) => ({
+      title: item.title,
+      artist: item.subtitle,
+    }))
+  );
+
+  if (flexibleMatches.length > 0) {
+    // Among artist matches, find the best title match
     const normalizedTrackTitle = normalizeString(track.track);
-    const normalizedItemArtist = normalizeString(item.subtitle);
-    const normalizedTrackArtist = normalizeString(track.artist);
 
-    // Log each comparison in detail
-    logger.debug("Comparing:", {
-      itemTitle: normalizedItemTitle,
-      trackTitle: normalizedTrackTitle,
-      itemArtist: normalizedItemArtist,
-      trackArtist: normalizedTrackArtist,
-      hint: item.hint,
-      originalTitle: item.title,
-      originalSubtitle: item.subtitle,
+    // First try exact title match
+    const exactMatch = flexibleMatches.find((item) => normalizeString(item.title) === normalizedTrackTitle);
+
+    if (exactMatch) {
+      logger.debug(`Found exact title match: ${exactMatch.title}`);
+      return exactMatch;
+    }
+
+    // Then try matching without parenthetical content
+    const cleanMatch = flexibleMatches.find((item) => {
+      const cleanItemTitle = normalizeString(item.title)
+        .replace(/\s*\([^)]*\)/g, "")
+        .trim();
+      const cleanTrackTitle = normalizedTrackTitle.replace(/\s*\([^)]*\)/g, "").trim();
+      return cleanItemTitle === cleanTrackTitle;
     });
 
-    // First check if artist matches
-    const artistParts = normalizedTrackArtist.split(" and ").map((p) => p.trim());
-    const itemArtistParts = normalizedItemArtist.split(/,|\band\b/).map((p) => p.trim());
-
-    // Require at least one artist part to match exactly
-    const artistMatch = artistParts.some((artistPart) =>
-      itemArtistParts.some(
-        (itemArtistPart) =>
-          itemArtistPart === artistPart || itemArtistPart.includes(artistPart) || artistPart.includes(itemArtistPart)
-      )
-    );
-
-    if (!artistMatch) {
-      logger.debug("Artist mismatch:", {
-        artistParts,
-        itemArtistParts,
-        normalizedTrackArtist,
-        normalizedItemArtist,
-      });
-      continue;
-    }
-
-    // For theme music, try different variations
-    if (normalizedTrackTitle.includes("theme")) {
-      // Extract the main title if it's in parentheses format: "Main Title (Theme Name)"
-      const parenthesesMatch = normalizedTrackTitle.match(/^(.*?)\s*\((.*?)\)$/);
-      const alternateTitle = parenthesesMatch?.[1]?.trim() ?? "";
-      const themeTitle = parenthesesMatch?.[2]?.trim() ?? "";
-
-      const baseTitle = normalizedTrackTitle
-        .replace(/^the\s+/i, "")
-        .replace(/\s*theme$/i, "")
-        .replace(/\s*\(.*?\)$/i, "") // Remove parenthetical content at the end
-        .trim();
-
-      const variations = [
-        normalizedTrackTitle,
-        baseTitle,
-        ...(alternateTitle ? [alternateTitle] : []),
-        ...(themeTitle ? [themeTitle] : []),
-        `theme from ${baseTitle}`,
-        `${baseTitle} theme`,
-        baseTitle.replace(/\s+/g, ""),
-        `${baseTitle} signature tune`,
-        `${baseTitle} signature theme`,
-        `${baseTitle} title theme`,
-        `${baseTitle} title music`,
-        `theme music from ${baseTitle}`,
-        `${baseTitle} opening theme`,
-      ];
-
-      logger.debug("Theme variations:", variations);
-
-      const titleMatch = variations.some((v) => {
-        const itemVariations = [
-          normalizedItemTitle,
-          normalizedItemTitle.replace(/^the\s+/i, ""),
-          normalizedItemTitle.replace(/\s*theme$/i, ""),
-          normalizedItemTitle.replace(/^the\s+|\s*theme$/gi, ""),
-          normalizedItemTitle.replace(/\s*\(.*?\)$/i, ""), // Remove parenthetical content at the end
-        ];
-
-        const matches = itemVariations.some((iv) => iv.includes(v) || v.includes(iv));
-
-        if (matches) {
-          logger.debug(`Found matching variation: ${v} matches ${normalizedItemTitle}`);
-        }
-        return matches;
-      });
-
-      if (titleMatch) {
-        logger.debug("Found theme music match:", {
-          itemTitle: item.title,
-          itemArtist: item.subtitle,
-          matchType: "theme",
-          variations,
-        });
-        return item;
-      }
-      continue;
-    }
-
-    // Rest of the existing matching logic...
-    const itemKey = extractKeySignature(normalizedItemTitle);
-    const trackKey = extractKeySignature(normalizedTrackTitle);
-
-    if (itemKey && trackKey && itemKey !== trackKey) continue;
-
-    const [composerPart, ...titleParts] = normalizedTrackTitle.split(":");
-    const mainTitle = titleParts.join(" ").trim() || composerPart;
-
-    const cleanItemTitle = cleanClassicalTitle(normalizedItemTitle);
-    const cleanTrackTitle = cleanClassicalTitle(mainTitle);
-
-    const itemWords = new Set(cleanItemTitle.split(" ").filter(isSignificantWord));
-    const trackWords = new Set(cleanTrackTitle.split(" ").filter(isSignificantWord));
-
-    const minMatchRatio = Math.min(trackWords.size, 3) <= 2 ? 0.8 : 0.5;
-    const commonWords = [...itemWords].filter((word) => trackWords.has(word));
-    const matchRatio = commonWords.length / Math.min(itemWords.size, trackWords.size);
-
-    if (matchRatio >= minMatchRatio) {
-      logger.debug("Found match with ratio:", {
-        ratio: matchRatio,
-        commonWords,
-        itemWords: [...itemWords],
-        trackWords: [...trackWords],
-      });
-      return item;
+    if (cleanMatch) {
+      logger.debug(`Found clean title match: ${cleanMatch.title}`);
+      return cleanMatch;
     }
   }
+
   return undefined;
 }
 
@@ -988,41 +1004,6 @@ function cleanClassicalTitle(title: string): string {
     .replace(/\s*[,:]\s*/g, " ") // Normalize punctuation to spaces
     .replace(/\s+/g, " ") // Normalize spaces
     .trim();
-}
-
-function isSignificantWord(word: string): boolean {
-  // Skip common classical music terms that don't help with matching
-  const commonTerms = new Set([
-    "movement",
-    "allegro",
-    "andante",
-    "adagio",
-    "scherzo",
-    "rondo",
-    "major",
-    "minor",
-    "sharp",
-    "flat",
-    "the",
-    "for",
-    "with",
-    "and",
-    "in",
-    "by",
-    "op",
-    "no",
-    "bwv",
-    "k",
-    "s",
-    "from",
-    "to",
-    "of",
-    "arranged",
-    "transcribed",
-    "performed",
-  ]);
-
-  return word.length > 2 && !commonTerms.has(word.toLowerCase());
 }
 
 async function playAlbumTrack(
