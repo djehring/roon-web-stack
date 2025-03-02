@@ -14,7 +14,7 @@ module.exports = {
     "src/route/.",
     "src/service/register-graceful-shutdown.ts",
   ],
-  coverageReporters: ["html", "text", "text-summary", "cobertura"],
+  coverageReporters: ["html", "text", "text-summary", "cobertura", "lcov"],
   // coverageReporters: [
   //   "json",
   //   "text",

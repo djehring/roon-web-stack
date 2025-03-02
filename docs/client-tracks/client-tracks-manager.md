@@ -17,6 +17,23 @@ For each track, the system first attempts to find it via album search, and if th
 - Any tracks that can't be found are collected in an "unmatched tracks" list
 - This unmatched tracks list is returned at the end of the operation for display to the user
 
+## Music Sources
+
+Roon serves as the comprehensive source for all music in this system, providing access to:
+
+1. **Local Library**: Music files stored directly on the user's Roon server or network-attached storage
+2. **Qobuz**: Integrated streaming service offering high-resolution audio
+3. **Tidal**: Integrated streaming service with a vast catalog of tracks
+
+The client-tracks-manager searches across all these sources when finding music. This means:
+
+- Tracks can be found regardless of whether they exist locally or on streaming platforms
+- The same matching algorithms work across all sources
+- Quality selection is handled automatically by Roon based on available versions
+- Users don't need to specify the source - the system will find the best match available
+
+This unified approach allows for seamless playback from multiple sources without requiring the user to know where a particular track is stored.
+
 ## Roon API Navigation Pattern
 
 The Roon API uses a hierarchical navigation pattern that mimics the Roon user interface. This involves two main API calls:
@@ -91,7 +108,7 @@ Music track matching presents several unique challenges that this implementation
 
 ### 1. Metadata Inconsistencies
 
-**Challenge**: Track metadata often varies between source systems (e.g., Spotify, Apple Music) and Roon.
+**Challenge**: Track metadata often varies between different sources within Roon's ecosystem (local library, Tidal, and Qobuz) with differences in formatting, completeness, and accuracy.
 
 **Solution**: 
 - Aggressive normalization of strings removes diacritics, punctuation, and case differences
@@ -141,6 +158,15 @@ Music track matching presents several unique challenges that this implementation
 - Implementation of two different search strategies
 - Comprehensive error handling with fallbacks
 - Session management with `resetBrowseSession`
+
+### 7. Cross-Source Matching
+
+**Challenge**: The same track may exist in multiple sources (local library, Qobuz, Tidal) with slightly different metadata.
+
+**Solution**:
+- Search strategy works identically across all sources
+- Roon's internal aggregation handles duplicates across sources
+- Flexible matching accommodates slight metadata differences between sources
 
 ## Track Matching Algorithm
 

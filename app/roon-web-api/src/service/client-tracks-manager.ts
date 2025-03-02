@@ -7,6 +7,7 @@ import {
   RoonApiBrowseResponse,
 } from "@model";
 import { Track } from "../ai-service/types/track";
+import { resetBrowseSession } from "./roon-utils";
 
 interface TrackToPlay {
   title: string;
@@ -37,7 +38,7 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
       }
 
       logger.debug({ track, startPlay }, "Processing track");
-      await resetBrowseSession(browseOptions.multi_session_key);
+      await resetBrowseSession(browseOptions.multi_session_key, "search");
 
       // Try album-based search first (our new primary method)
       const foundTrack = await findTrackByAlbum(track, browseOptions);
@@ -76,29 +77,6 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
   }
 
   return unmatchedTracks;
-}
-
-async function resetBrowseSession(clientId: string | undefined): Promise<RoonApiBrowseResponse> {
-  // Reset to initial search context
-  const resetOptions = {
-    hierarchy: "search",
-    pop_all: true, // This will clear the browse stack
-    multi_session_key: clientId,
-  };
-
-  try {
-    // Reset the browse session
-    const resetResponse = await roon.browse(resetOptions);
-
-    if (!resetResponse.list) {
-      logger.debug("Browse session reset did not return a list");
-    }
-
-    return resetResponse;
-  } catch (error) {
-    logger.error(`Failed to reset browse session: ${JSON.stringify(error)}`);
-    throw error;
-  }
 }
 
 async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions): Promise<RoonApiBrowseResponse> {
@@ -327,11 +305,7 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
   try {
     // Initial browse to get to root menu
     try {
-      await roon.browse({
-        hierarchy: "browse",
-        pop_all: true,
-        multi_session_key: browseOptions.multi_session_key,
-      });
+      await resetBrowseSession(browseOptions.multi_session_key, "browse");
     } catch (error) {
       logger.error(`Error in initial browse: ${JSON.stringify(error)}`);
       return null;

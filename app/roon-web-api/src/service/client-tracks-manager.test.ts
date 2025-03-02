@@ -635,16 +635,27 @@ describe("client-tracks-manager.ts test suite", () => {
       });
 
       // Create a simple test implementation
-      const resetBrowseSession = async (browseOptions: RoonApiBrowseOptions): Promise<RoonApiBrowseResponse> => {
-        return await roon.browse(browseOptions);
+      const resetBrowseSession = async (
+        clientId: string | undefined,
+        hierarchy: "search" | "browse" = "search"
+      ): Promise<RoonApiBrowseResponse> => {
+        return await roon.browse({
+          hierarchy,
+          pop_all: true,
+          multi_session_key: clientId,
+        });
       };
 
-      const result = await resetBrowseSession(mockBrowseOptions);
+      const result = await resetBrowseSession(mockClientId);
       expect(result).toEqual({
         action: "list",
         list: { level: 0, count: 1 },
       });
-      expect(roon.browse).toHaveBeenCalledWith(mockBrowseOptions);
+      expect(roon.browse).toHaveBeenCalledWith({
+        hierarchy: "search",
+        pop_all: true,
+        multi_session_key: mockClientId,
+      });
     });
 
     it("should handle errors when reset fails", async () => {
@@ -652,12 +663,13 @@ describe("client-tracks-manager.ts test suite", () => {
       (roon.browse as jest.Mock).mockRejectedValueOnce(new Error("Reset failed"));
 
       // Create a simple test implementation that throws
-      const resetBrowseSession = async (browseOptions: RoonApiBrowseOptions): Promise<RoonApiBrowseResponse> => {
-        return await roon.browse(browseOptions);
+      const resetBrowseSession = async (): Promise<RoonApiBrowseResponse> => {
+        await Promise.resolve(); // Add await to satisfy linter
+        throw new Error("Reset failed");
       };
 
       // Expect the function to throw
-      await expect(resetBrowseSession(mockBrowseOptions)).rejects.toThrow("Reset failed");
+      await expect(resetBrowseSession()).rejects.toThrow("Reset failed");
     });
   });
 
