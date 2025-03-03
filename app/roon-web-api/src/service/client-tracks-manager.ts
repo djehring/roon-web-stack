@@ -7,7 +7,9 @@ import {
   RoonApiBrowseResponse,
 } from "@model";
 import { Track } from "../ai-service/types/track";
-import { browseIntoLibrary, getLibrarySearchItem, isInLibraryMenu, resetBrowseSession } from "./roon-utils";
+import { matchAlbumInList } from "./matching-utils";
+import { browseIntoLibrary, getLibrarySearchItem, resetBrowseSession, searchForAlbumWithTitle } from "./roon-utils";
+import { normalizeArtistName, normalizeString } from "./string-utils";
 
 interface TrackToPlay {
   title: string;
@@ -249,58 +251,6 @@ async function executeAction(queueItem: Item, track: TrackToPlay, browseOptions:
   logger.debug(`Queuing track: ${track.title} by ${track.artist}`);
 }
 
-function normalizeString(str: string): string {
-  if (!str) return "";
-
-  // Log original string for debugging
-  logger.debug(`Normalizing string: "${str}"`);
-
-  const normalized = str
-    .toLowerCase()
-    .normalize("NFKD") // Decompose accented characters
-    .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
-    .replace(/['']/g, "'")
-    .replace(/[""]/g, '"')
-    .replace(/\s*&\s*/g, " and ")
-    // Remove disc-track numbers like "1-6" or "2-11"
-    .replace(/^(?:\d+-\d+|\d+)(?:\s+|\.\s+)/, "")
-    .replace(/\s*\([^)]*(?:version|mix|edit|remix|remaster|remastered|mono|stereo|deluxe)\)[^)]*\)?/gi, "") // Remove version decorations
-    .replace(/\s*\[.*?\]/g, "") // Remove content in square brackets
-    .replace(/\s*[:-]\s*/g, " ") // Normalize both colons and dashes to spaces
-    .replace(/[^\w\s'"-]/g, "") // Keep only word chars, spaces, quotes, and dashes
-    .replace(/\s+/g, " ") // Normalize spaces
-    .replace(/greatest/g, "great") // Normalize "greatest" to "great"
-    .replace(/^\d+\s*/, "") // Remove leading track numbers
-    .trim();
-
-  logger.debug(`Normalized result: "${normalized}"`);
-  return normalized;
-}
-
-function normalizeArtistName(name: string): string {
-  logger.debug(`Normalizing artist name: "${name}"`);
-
-  // First normalize the string using our base function
-  const normalized = normalizeString(name)
-    // Handle common name variations
-    .replace(/stephan/g, "stephane")
-    .replace(/steven/g, "stephen")
-    // Explicitly handle Sinéad O'Connor variations
-    .replace(/sinead/g, "sinead")
-    .replace(/sinéad/g, "sinead")
-    .replace(/oconnor/g, "oconnor")
-    .replace(/o'connor/g, "oconnor");
-
-  // Split on commas and 'and' to handle collaborations
-  const parts = normalized.split(/,|\band\b/).map((p) => p.trim());
-
-  // For collaborations, we want to keep all parts for flexible matching
-  const result = parts.length > 1 ? parts.join(" ") : normalized;
-
-  logger.debug(`Normalized artist name result: "${name}" -> "${result}"`);
-  return result;
-}
-
 export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrowseOptions): Promise<TrackToPlay | null> {
   try {
     // Initial browse to get to root menu
@@ -325,200 +275,22 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
       logger.debug(`FAIL. Could not find Search menu item`);
       return null;
     }
-
+    let albumsList;
     try {
-      let libraryMenu;
-      try {
-        libraryMenu = await roon.load({
-          hierarchy: "browse",
-          multi_session_key: browseOptions.multi_session_key,
-          level: libraryResponse.list.level,
-        });
-      } catch (error) {
-        logger.error(`Error loading library menu: ${JSON.stringify(error)}`);
-        return null;
-      }
-
-      logger.debug(`Library menu items: ${JSON.stringify(libraryMenu.items)}`);
-
-      // Check if we need to navigate to Library or if we're already there
-      let searchItem;
-      if (isInLibraryMenu(libraryMenu)) {
-        // We're already in the Library menu
-        logger.debug("Already in Library menu, looking for Search");
-        searchItem = libraryMenu.items.find((item) => item.title === "Search");
-      } else {
-        // Need to navigate to Library first
-        logger.debug("At root menu, looking for Library");
-        const libraryItem = libraryMenu.items.find((item) => item.title === "Library");
-        if (!libraryItem) {
-          logger.debug(`FAIL. Could not find Library menu item`);
-          return null;
-        }
-
-        logger.debug(`2. Now browsing into Library with key: ${libraryItem.item_key}`);
-
-        // Step 2: Browse into Library
-        let libraryContentsResponse;
-        try {
-          libraryContentsResponse = await roon.browse({
-            hierarchy: "browse",
-            item_key: libraryItem.item_key,
-            multi_session_key: browseOptions.multi_session_key,
-            zone_or_output_id: browseOptions.zone_or_output_id,
-          });
-        } catch (error) {
-          logger.error(`Error browsing into library contents: ${JSON.stringify(error)}`);
-          return null;
-        }
-
-        if (!libraryContentsResponse.list) {
-          logger.debug(`FAIL. No library contents returned`);
-          return null;
-        }
-
-        let libraryContents;
-        try {
-          libraryContents = await roon.load({
-            hierarchy: "browse",
-            multi_session_key: browseOptions.multi_session_key,
-            level: libraryContentsResponse.list.level,
-          });
-        } catch (error) {
-          logger.error(`Error loading library contents: ${JSON.stringify(error)}`);
-          return null;
-        }
-
-        // Find Search in Library contents
-        searchItem = libraryContents.items.find((item) => item.title === "Search");
-      }
-
-      // Step 3: Find and select Search section
-      if (!searchItem) {
-        logger.debug(`FAIL. Could not find Search section in Library`);
-        return null;
-      }
-
-      logger.debug(`3. Now browsing into Search with key: ${searchItem.item_key} and album: ${track.album}`);
-
-      // Step 4: Browse into Search and perform search
-      let searchResponse;
-      try {
-        searchResponse = await roon.browse({
-          hierarchy: "browse",
-          item_key: searchItem.item_key,
-          input: track.album,
-          multi_session_key: browseOptions.multi_session_key,
-          zone_or_output_id: browseOptions.zone_or_output_id,
-        });
-      } catch (error) {
-        logger.error(`Error performing album search: ${JSON.stringify(error)}`);
-        return null;
-      }
-
-      if (!searchResponse.list) {
-        logger.debug(`FAIL. No search results returned`);
-        return null;
-      }
-
-      logger.debug(`4. Now browsing into Search results with level: ${searchResponse.list.level}`);
-
-      let searchResults;
-      try {
-        searchResults = await roon.load({
-          hierarchy: "browse",
-          multi_session_key: browseOptions.multi_session_key,
-          level: searchResponse.list.level,
-        });
-      } catch (error) {
-        logger.error(`Error loading search results: ${JSON.stringify(error)}`);
-        return null;
-      }
-
-      // Log search results for debugging
-      logger.debug(
-        "5. Search results:",
-        searchResults.items.map((item) => ({
-          title: item.title,
-          subtitle: item.subtitle,
-          hint: item.hint,
-        }))
+      albumsList = await searchForAlbumWithTitle(
+        browseOptions.multi_session_key,
+        searchItem.item_key,
+        browseOptions.zone_or_output_id,
+        track.album
       );
 
-      // Step 5: Find and select Albums section
-      const albumsSection = searchResults.items.find((item) => item.title === "Albums");
-      if (!albumsSection) {
-        logger.debug(`FAIL. No Albums section found in search results`);
+      if (!albumsList) {
+        logger.debug(`FAIL. No albums found for: ${track.album}`);
         return null;
       }
-
-      logger.debug(`6. Now browsing into Albums with key: ${albumsSection.item_key}`);
-
-      // Step 6: Browse albums list
-      let albumsResponse;
-      try {
-        albumsResponse = await roon.browse({
-          hierarchy: "browse",
-          item_key: albumsSection.item_key,
-          multi_session_key: browseOptions.multi_session_key,
-          zone_or_output_id: browseOptions.zone_or_output_id,
-        });
-      } catch (error) {
-        logger.error(`Error browsing album list: ${JSON.stringify(error)}`);
-        return null;
-      }
-
-      if (!albumsResponse.list) {
-        logger.debug(`FAIL. No album list returned`);
-        return null;
-      }
-
-      let albumsList;
-      try {
-        albumsList = await roon.load({
-          hierarchy: "browse",
-          multi_session_key: browseOptions.multi_session_key,
-          level: albumsResponse.list.level,
-        });
-      } catch (error) {
-        logger.error(`Error loading album list: ${JSON.stringify(error)}`);
-        return null;
-      }
-
-      // Log albums for debugging
-      logger.debug(
-        "Found albums:",
-        albumsList.items.map((item) => ({
-          title: item.title,
-          subtitle: item.subtitle,
-          normalizedTitle: normalizeString(item.title),
-          normalizedAlbum: normalizeString(track.album),
-        }))
-      );
 
       // Step 7: Find exact album match
-      const albumMatch = albumsList.items.find((item) => {
-        const normalizedTitle = normalizeString(item.title);
-        const normalizedAlbum = normalizeString(track.album);
-
-        // Extract artist name from [[id|name]] format and normalize it
-        const artistFromSubtitle = item.subtitle?.match(/\[\[\d+\|(.*?)\]\]/)?.[1] || "";
-        const normalizedItemArtist = normalizeArtistName(artistFromSubtitle);
-        const normalizedTrackArtist = normalizeArtistName(track.artist);
-
-        // Check if the normalized artist names match
-        const artistMatch =
-          normalizedItemArtist.includes(normalizedTrackArtist) || normalizedTrackArtist.includes(normalizedItemArtist);
-
-        // Log the comparison for debugging
-        logger.debug(`Album comparison: "${item.title}" (${artistFromSubtitle}) vs "${track.album}" (${track.artist})`);
-        logger.debug(
-          `Normalized: "${normalizedTitle}" (${normalizedItemArtist}) vs "${normalizedAlbum}" (${normalizedTrackArtist})`
-        );
-        logger.debug(`Match result: Title=${normalizedTitle === normalizedAlbum}, Artist=${artistMatch}`);
-
-        return normalizedTitle === normalizedAlbum && artistMatch;
-      });
+      const albumMatch = matchAlbumInList(albumsList, track);
 
       if (!albumMatch) {
         logger.debug(`FAIL. No matching album found for: ${track.album} by ${track.artist}`);

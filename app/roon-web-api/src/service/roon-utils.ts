@@ -140,3 +140,110 @@ export async function getLibrarySearchItem(
     return null;
   }
 }
+
+/**
+ * Searches for an album by title and returns the list of albums
+ * @param clientId - The client's session key
+ * @param item_key - The item key of the search item
+ * @param zoneId - The zone ID
+ * @param albumTitle - The title of the album to search for
+ * @returns Promise resolving to the list of albums or null if failed
+ */
+export async function searchForAlbumWithTitle(
+  clientId: string | undefined,
+  item_key: string | undefined,
+  zoneId: string | undefined,
+  albumTitle: string
+) {
+  // Early return if required parameters are missing
+  if (!item_key) {
+    logger.debug("FAIL. Search item key is required");
+    return null;
+  }
+
+  let searchResponse;
+  try {
+    searchResponse = await roon.browse({
+      hierarchy: "browse",
+      item_key: item_key,
+      input: albumTitle,
+      multi_session_key: clientId,
+      zone_or_output_id: zoneId,
+    });
+  } catch (error) {
+    logger.error(`Error searching for album with title: ${JSON.stringify(error)}`);
+    return null;
+  }
+
+  if (!searchResponse.list) {
+    logger.debug(`FAIL. No search results returned`);
+    return null;
+  }
+
+  logger.debug(`Now browsing into Search results with level: ${searchResponse.list.level}`);
+  let searchResults;
+  try {
+    searchResults = await roon.load({
+      hierarchy: "browse",
+      multi_session_key: clientId,
+      level: searchResponse.list.level,
+    });
+  } catch (error) {
+    logger.error(`Error loading search results: ${JSON.stringify(error)}`);
+    return null;
+  }
+
+  // Log search results for debugging
+  logger.debug(
+    "Search results:",
+    searchResults.items.map((item) => ({
+      title: item.title,
+      subtitle: item.subtitle,
+      hint: item.hint,
+    }))
+  );
+  // Step 5: Find and select Albums section
+  const albumsSection = searchResults.items.find((item) => item.title === "Albums");
+  if (!albumsSection) {
+    logger.debug(`FAIL. No Albums section found in search results`);
+    return null;
+  }
+  logger.debug(`Now browsing into Albums with key: ${albumsSection.item_key}`);
+  let albumsResponse;
+  try {
+    albumsResponse = await roon.browse({
+      hierarchy: "browse",
+      item_key: albumsSection.item_key,
+      multi_session_key: clientId,
+      zone_or_output_id: zoneId,
+    });
+  } catch (error) {
+    logger.error(`Error browsing album list: ${JSON.stringify(error)}`);
+    return null;
+  }
+  if (!albumsResponse.list) {
+    logger.debug(`FAIL. No album list returned`);
+    return null;
+  }
+  let albumsList;
+  try {
+    albumsList = await roon.load({
+      hierarchy: "browse",
+      multi_session_key: clientId,
+      level: albumsResponse.list.level,
+    });
+  } catch (error) {
+    logger.error(`Error loading album list: ${JSON.stringify(error)}`);
+    return null;
+  }
+  // Log albums for debugging
+  logger.debug(
+    "Found albums:",
+    albumsList.items.map((item) => ({
+      title: item.title,
+      subtitle: item.subtitle,
+      hint: item.hint,
+    }))
+  );
+  return albumsList;
+}
