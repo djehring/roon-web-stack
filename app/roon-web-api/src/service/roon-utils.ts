@@ -34,3 +34,33 @@ export async function resetBrowseSession(
     throw error;
   }
 }
+
+/**
+ * Browses into the library section of Roon
+ * @param clientId - The client's session key
+ * @param zoneId - The zone ID
+ * @returns Promise resolving to the browse response or null if failed
+ */
+export async function browseIntoLibrary(
+  clientId: string | undefined,
+  zoneId: string | undefined
+): Promise<Required<Pick<RoonApiBrowseResponse, "list">> | null> {
+  try {
+    const response = await roon.browse({
+      hierarchy: "browse",
+      multi_session_key: clientId,
+      zone_or_output_id: zoneId,
+    });
+
+    if (!response.list) {
+      logger.debug("FAIL. No library menu returned");
+      return null;
+    }
+
+    logger.debug(`Library response: ${JSON.stringify(response)}`);
+    return response as Required<Pick<RoonApiBrowseResponse, "list">>;
+  } catch (error) {
+    logger.error(`Error browsing into library: ${JSON.stringify(error)}`);
+    return null;
+  }
+}

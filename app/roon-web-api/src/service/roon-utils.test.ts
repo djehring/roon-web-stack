@@ -1,6 +1,6 @@
 import { logger, roon } from "@infrastructure";
 import { RoonApiBrowseResponse } from "@model";
-import { resetBrowseSession } from "./roon-utils";
+import { browseIntoLibrary, resetBrowseSession } from "./roon-utils";
 
 // Mock the infrastructure imports
 jest.mock("@infrastructure", () => ({
@@ -114,6 +114,56 @@ describe("roon-utils", () => {
       await expect(resetBrowseSession(clientId)).rejects.toThrow(error);
 
       expect(logger.error).toHaveBeenCalledWith('Failed to reset search session: {"message":"Browse failed"}');
+    });
+  });
+
+  describe("browseIntoLibrary", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("should successfully browse into library", async () => {
+      const mockResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: {
+          title: "Library",
+          level: 0,
+          count: 1,
+        },
+      };
+      (roon.browse as jest.Mock).mockResolvedValue(mockResponse);
+
+      const result = await browseIntoLibrary("test-client-id", "test-zone-id");
+
+      expect(result).toEqual(mockResponse);
+      expect(roon.browse).toHaveBeenCalledWith({
+        hierarchy: "browse",
+        multi_session_key: "test-client-id",
+        zone_or_output_id: "test-zone-id",
+      });
+      expect(logger.debug).toHaveBeenCalledWith(`Library response: ${JSON.stringify(mockResponse)}`);
+    });
+
+    it("should handle missing list in response", async () => {
+      const mockResponse: RoonApiBrowseResponse = {
+        action: "list",
+      };
+      (roon.browse as jest.Mock).mockResolvedValue(mockResponse);
+
+      const result = await browseIntoLibrary("test-client-id", "test-zone-id");
+
+      expect(result).toBeNull();
+      expect(logger.debug).toHaveBeenCalledWith("FAIL. No library menu returned");
+    });
+
+    it("should handle browse errors", async () => {
+      const error = { message: "Browse failed" };
+      (roon.browse as jest.Mock).mockRejectedValue(error);
+
+      const result = await browseIntoLibrary("test-client-id", "test-zone-id");
+
+      expect(result).toBeNull();
+      expect(logger.error).toHaveBeenCalledWith('Error browsing into library: {"message":"Browse failed"}');
     });
   });
 });

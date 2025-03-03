@@ -7,7 +7,7 @@ import {
   RoonApiBrowseResponse,
 } from "@model";
 import { Track } from "../ai-service/types/track";
-import { resetBrowseSession } from "./roon-utils";
+import { browseIntoLibrary, resetBrowseSession } from "./roon-utils";
 
 interface TrackToPlay {
   title: string;
@@ -304,30 +304,14 @@ function normalizeArtistName(name: string): string {
 export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrowseOptions): Promise<TrackToPlay | null> {
   try {
     // Initial browse to get to root menu
-    try {
-      await resetBrowseSession(browseOptions.multi_session_key, "browse");
-    } catch (error) {
-      logger.error(`Error in initial browse: ${JSON.stringify(error)}`);
-      return null;
-    }
+    await resetBrowseSession(browseOptions.multi_session_key, "browse");
 
     // Step 1: Browse into Library first
     logger.debug(`1. Browsing into Library to search for album: ${track.album}`);
 
-    let libraryResponse;
-    try {
-      libraryResponse = await roon.browse({
-        hierarchy: "browse",
-        multi_session_key: browseOptions.multi_session_key,
-        zone_or_output_id: browseOptions.zone_or_output_id,
-      });
-    } catch (error) {
-      logger.error(`Error browsing into library: ${JSON.stringify(error)}`);
-      return null;
-    }
+    const libraryResponse = await browseIntoLibrary(browseOptions.multi_session_key, browseOptions.zone_or_output_id);
 
-    if (!libraryResponse.list) {
-      logger.debug(`FAIL. No library menu returned`);
+    if (!libraryResponse) {
       return null;
     }
 
@@ -1056,7 +1040,6 @@ async function playAlbumTrack(
     // startPlay true = "Play Now", false = "Queue"
     const actionTitle = startPlay ? "Play Now" : "Queue";
     const action = actionList.items.find((item) => item.title === actionTitle && item.hint === "action");
-
     if (!action) {
       throw new Error(`Could not find ${actionTitle} action for track: ${track.title}`);
     }

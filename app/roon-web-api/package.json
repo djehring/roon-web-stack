@@ -9,8 +9,8 @@
     "clean": "rimraf bin",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "start": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=development LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
-    "start:prod": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=production NODE_OPTIONS='--trace-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
+    "start:debug": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=development NODE_OPTIONS='--no-deprecation' LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
+    "start:prod": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=production NODE_OPTIONS='--no-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
     "test": "jest"
   },
   "dependencies": {
