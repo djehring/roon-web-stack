@@ -7,7 +7,7 @@ import {
   RoonApiBrowseResponse,
 } from "@model";
 import { Track } from "../ai-service/types/track";
-import { browseIntoLibrary, resetBrowseSession } from "./roon-utils";
+import { browseIntoLibrary, getLibrarySearchItem, isInLibraryMenu, resetBrowseSession } from "./roon-utils";
 
 interface TrackToPlay {
   title: string;
@@ -315,7 +315,16 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
       return null;
     }
 
-    logger.debug(`Library response: ${JSON.stringify(libraryResponse)}`);
+    const searchItem = await getLibrarySearchItem(
+      browseOptions.multi_session_key,
+      browseOptions.zone_or_output_id,
+      libraryResponse
+    );
+
+    if (!searchItem) {
+      logger.debug(`FAIL. Could not find Search menu item`);
+      return null;
+    }
 
     try {
       let libraryMenu;
@@ -333,12 +342,8 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
       logger.debug(`Library menu items: ${JSON.stringify(libraryMenu.items)}`);
 
       // Check if we need to navigate to Library or if we're already there
-      const isInLibrary = ["Search", "Artists", "Albums", "Tracks"].every((title) =>
-        libraryMenu.items.find((i) => i.title === title)
-      );
-
       let searchItem;
-      if (isInLibrary) {
+      if (isInLibraryMenu(libraryMenu)) {
         // We're already in the Library menu
         logger.debug("Already in Library menu, looking for Search");
         searchItem = libraryMenu.items.find((item) => item.title === "Search");
