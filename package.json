@@ -44,6 +44,8 @@
     "@angular/pwa": "^19.1.8",
     "@types/potrace": "^2",
     "@types/to-ico": "^1",
+    "axios": "^1.8.2",
+    "cheerio": "^1.0.0",
     "pino-pretty": "^13.0.0",
     "potrace": "^2.1.8",
     "sharp": "^0.33.2",

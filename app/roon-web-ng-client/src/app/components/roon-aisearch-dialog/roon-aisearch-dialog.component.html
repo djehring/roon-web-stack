@@ -54,6 +54,7 @@
           cdkDrag
           class="track-item"
           [class.swiping]="getSwipingState(i).swiping"
+          [class.has-error]="track.error"
           (touchstart)="onTouchStart($event, i)"
           (touchmove)="onTouchMove($event, i)"
           (touchend)="onTouchEnd($event, i)"
@@ -78,7 +79,22 @@
               <div class="track-details">
                 <span class="track-artist">{{ track.artist }}</span>
                 <span class="track-separator">•</span>
-                <span class="track-album">{{ track.album }}</span>
+                <span class="track-album">
+                  {{ track.album }}
+                  <mat-icon *ngIf="track.wasAutoCorrected" 
+                    class="corrected-icon" 
+                    matTooltip="Album was automatically corrected">
+                    auto_fix_high
+                  </mat-icon>
+                </span>
+              </div>
+              <div *ngIf="track.correctionMessage" class="track-correction">
+                <mat-icon class="info-icon">info</mat-icon>
+                <span>{{ track.correctionMessage }}</span>
+              </div>
+              <div *ngIf="track.error && !track.wasAutoCorrected" class="track-error">
+                <mat-icon class="error-icon">error</mat-icon>
+                <span>{{ track.error }}</span>
               </div>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import fs from "fs/promises";
+import path from "path";
 import { logger, roon } from "@infrastructure";
 import {
   Item,
@@ -19,6 +21,39 @@ interface TrackToPlay {
   zoneId: string;
 }
 
+// Directory for storing unmatched tracks data
+const UNMATCHED_TRACKS_DIR = path.join(process.cwd(), "data", "unmatched-tracks");
+
+/**
+ * Persists unmatched tracks to a JSON file for later analysis
+ * @param tracks - Array of unmatched tracks
+ */
+async function persistUnmatchedTracks(tracks: Track[]): Promise<void> {
+  if (!tracks.length) return;
+
+  try {
+    // Create directory if it doesn't exist
+    await fs.mkdir(UNMATCHED_TRACKS_DIR, { recursive: true });
+
+    // Create a timestamp-based filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = path.join(UNMATCHED_TRACKS_DIR, `unmatched-tracks-${timestamp}.json`);
+
+    // Add metadata to help with analysis
+    const dataToSave = {
+      timestamp: new Date().toISOString(),
+      count: tracks.length,
+      tracks,
+    };
+
+    // Write to file
+    await fs.writeFile(filename, JSON.stringify(dataToSave, null, 2));
+    logger.info(`Persisted ${tracks.length} unmatched tracks to ${filename}`);
+  } catch (error) {
+    logger.error(`Failed to persist unmatched tracks: ${JSON.stringify(error)}`);
+  }
+}
+
 export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBrowseOptions): Promise<Track[]> {
   const unmatchedTracks: Track[] = [];
   let startPlay = true;
@@ -35,6 +70,7 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
     try {
       if (!track.artist || !track.track) {
         logger.error("Invalid track data:", track);
+        track.error = "Missing artist or track name";
         unmatchedTracks.push(track);
         continue;
       }
@@ -43,22 +79,29 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
       await resetBrowseSession(browseOptions.multi_session_key, "search");
 
       // Try album-based search first (our new primary method)
-      const foundTrack = await findTrackByAlbum(track, browseOptions);
-      if (foundTrack) {
-        logger.debug(`Found track via album search: ${foundTrack.title}`);
-        try {
-          // Use album-specific playback for tracks found via album search
-          await playAlbumTrack(foundTrack, browseOptions, startPlay);
-          startPlay = false;
-          continue;
-        } catch (error) {
-          logger.error(`Error playing album track ${track.track}: ${JSON.stringify(error)}`);
-          // Fall through to direct search if playback fails
+      if (track.album && track.album.trim() !== "") {
+        logger.debug(`Attempting album-based search for "${track.track}" on album "${track.album}"`);
+        const foundTrack = await findTrackByAlbum(track, browseOptions);
+
+        if (foundTrack) {
+          logger.debug(`Found track via album search: ${foundTrack.title}`);
+          try {
+            // Use album-specific playback for tracks found via album search
+            await playAlbumTrack(foundTrack, browseOptions, startPlay);
+            startPlay = false;
+            continue;
+          } catch (error) {
+            logger.error(`Error playing album track ${track.track}: ${JSON.stringify(error)}`);
+            // Fall through to direct search if playback fails
+          }
+        } else {
+          logger.debug(`Track "${track.track}" not found on album "${track.album}"`);
+          track.error = `Track not found on album "${track.album}"`;
         }
       }
 
-      // If album search fails, try direct search as fallback
-      logger.debug({ track }, "Album search failed, trying direct search");
+      // After the album search fails, try direct search as fallback
+      logger.debug({ track }, "Album search failed or skipped, trying direct search");
       const trackFound = await findTrackInSearchResults(track, browseOptions, startPlay);
 
       if (trackFound) {
@@ -66,16 +109,22 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
         startPlay = false;
       } else {
         logger.debug({ track }, "Track not found in any search method");
+        if (!track.error) {
+          track.error = "Track not found in library";
+        }
         unmatchedTracks.push(track);
       }
     } catch (error) {
       logger.error(`Error processing track ${track.artist} - ${track.track}: ${JSON.stringify(error)}`);
+      track.error = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
       unmatchedTracks.push(track);
     }
   }
 
   if (unmatchedTracks.length > 0) {
     logger.error("Some tracks were not found:", unmatchedTracks);
+    // Persist unmatched tracks for later analysis
+    await persistUnmatchedTracks(unmatchedTracks);
   }
 
   return unmatchedTracks;
@@ -95,6 +144,14 @@ async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions):
       : []),
     track.track.replace(/^the\s+/i, ""), // Without "the"
     track.track.replace(/\s+theme$/i, ""), // Without "theme"
+    // Additional variations for better matching
+    track.track.replace(/'/g, ""), // Without apostrophes
+    track.track.replace(/\s+/g, " "), // Normalize spaces
+    // Handle common word variations
+    track.track.replace(/get down/i, "getdown"), // Handle "Get Down" variations
+    track.track.replace(/get back/i, "getback"), // Handle "Get Back" variations
+    // Try with just the artist name for broader search
+    track.artist,
   ].filter(Boolean);
 
   for (const searchTerm of searchVariations) {
@@ -253,6 +310,12 @@ async function executeAction(queueItem: Item, track: TrackToPlay, browseOptions:
 
 export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrowseOptions): Promise<TrackToPlay | null> {
   try {
+    // Skip album search if no album is specified
+    if (!track.album || track.album.trim() === "") {
+      logger.debug(`No album specified for track: ${track.track} by ${track.artist}`);
+      return null;
+    }
+
     // Initial browse to get to root menu
     await resetBrowseSession(browseOptions.multi_session_key, "browse");
 
@@ -288,6 +351,15 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
         logger.debug(`FAIL. No albums found for: ${track.album}`);
         return null;
       }
+
+      // Log all found albums for debugging
+      logger.debug(
+        "Found albums:",
+        albumsList.items.map((item) => ({
+          title: item.title,
+          artist: item.subtitle,
+        }))
+      );
 
       // Step 7: Find exact album match
       const albumMatch = matchAlbumInList(albumsList, track);
@@ -367,59 +439,19 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
       }
 
       // Log tracks for debugging
-      logger.debug("***IMPORTANT*** Album tracks:");
+      logger.debug(`***IMPORTANT*** Album tracks for "${albumMatch.title}" by "${albumMatch.subtitle}":`);
       tracksList.items.forEach((item) => {
         logger.debug(`Track: ${item.title}, Subtitle: ${item.subtitle}`);
       });
 
-      // Step 10: Find matching track
-      const matchingTrack = tracksList.items.find((item) => {
-        // Skip "Play Album" option
-        if (item.title === "Play Album") return false;
-
-        // Extract track number pattern (like "1-6" or just a number)
-        const trackNumberPattern = /^(?:\d+-\d+|\d+)(?:\s+|\.\s+)/;
-
-        // Get the original title for logging
-        const originalItemTitle = item.title;
-        const originalTrackTitle = track.track;
-
-        // Remove track number and normalize
-        const normalizedItemTitle = normalizeString(item.title.replace(trackNumberPattern, ""));
-        const normalizedTrackTitle = normalizeString(track.track);
-
-        // Log detailed comparison for debugging
-        logger.debug(`Track comparison: "${originalItemTitle}" vs "${originalTrackTitle}"`);
-        logger.debug(`Normalized: "${normalizedItemTitle}" vs "${normalizedTrackTitle}"`);
-
-        // Check for exact match
-        const isExactMatch = normalizedItemTitle === normalizedTrackTitle;
-
-        // If exact match, return immediately
-        if (isExactMatch) {
-          logger.debug(`Found exact match for track: "${item.title}"`);
-          return true;
-        }
-
-        // If not exact match, check if the base title matches (ignoring remaster/version info)
-        // This handles cases where the track title is "Nothing Compares 2 U" but the album track is "Nothing Compares 2 U (2009 Remaster)"
-        const baseItemTitle = normalizedItemTitle.replace(/\s*(?:remaster|version|mix|edit).*$/, "").trim();
-        const baseTrackTitle = normalizedTrackTitle.replace(/\s*(?:remaster|version|mix|edit).*$/, "").trim();
-
-        logger.debug(`Base title comparison: "${baseItemTitle}" vs "${baseTrackTitle}"`);
-
-        const isBaseMatch = baseItemTitle === baseTrackTitle;
-
-        if (isBaseMatch) {
-          logger.debug(`Found base title match for track: "${item.title}"`);
-          return true;
-        }
-
-        return false;
-      });
+      // Step 10: Find matching track with improved matching logic
+      const matchingTrack = findTrackInAlbumTracks(tracksList.items, track);
 
       if (!matchingTrack) {
         logger.debug(`FAIL. No matching track found in album: ${track.album}`);
+        // Log the track we were looking for and all available tracks for debugging
+        logger.debug(`Looking for track: "${track.track}" by "${track.artist}"`);
+        logger.debug("Available tracks:", tracksList.items.map((item) => item.title).join(", "));
         return null;
       }
 
@@ -441,6 +473,74 @@ export async function findTrackByAlbum(track: Track, browseOptions: RoonApiBrows
     logger.error(`Unexpected error in findTrackByAlbum: ${JSON.stringify(outerError)}`);
     return null;
   }
+}
+
+// Helper function to find a track in album tracks with improved matching
+function findTrackInAlbumTracks(tracks: Item[], track: Track): Item | undefined {
+  // Skip "Play Album" option and other non-track items
+  const actualTracks = tracks.filter(
+    (item) => item.title !== "Play Album" && item.hint !== "action" && item.subtitle !== "Play"
+  );
+
+  // First try exact match
+  for (const item of actualTracks) {
+    // Extract track number pattern (like "1-6" or just a number)
+    const trackNumberPattern = /^(?:\d+-\d+|\d+)(?:\s+|\.\s+)/;
+
+    // Get the original title for logging
+    const originalItemTitle = item.title;
+    const originalTrackTitle = track.track;
+
+    // Remove track number and normalize
+    const normalizedItemTitle = normalizeString(item.title.replace(trackNumberPattern, ""));
+    const normalizedTrackTitle = normalizeString(track.track);
+
+    // Log detailed comparison for debugging
+    logger.debug(`Track comparison: "${originalItemTitle}" vs "${originalTrackTitle}"`);
+    logger.debug(`Normalized: "${normalizedItemTitle}" vs "${normalizedTrackTitle}"`);
+
+    // Check for exact match
+    if (normalizedItemTitle === normalizedTrackTitle) {
+      logger.debug(`Found exact match for track: "${item.title}"`);
+      return item;
+    }
+  }
+
+  // If no exact match, try more flexible matching
+  for (const item of actualTracks) {
+    const trackNumberPattern = /^(?:\d+-\d+|\d+)(?:\s+|\.\s+)/;
+    const normalizedItemTitle = normalizeString(item.title.replace(trackNumberPattern, ""));
+    const normalizedTrackTitle = normalizeString(track.track);
+
+    // Check if the base title matches (ignoring remaster/version info)
+    // This handles cases where the track title is "Nothing Compares 2 U" but the album track is "Nothing Compares 2 U (2009 Remaster)"
+    const baseItemTitle = normalizedItemTitle.replace(/\s*(?:remaster|version|mix|edit|mono|stereo).*$/i, "").trim();
+    const baseTrackTitle = normalizedTrackTitle.replace(/\s*(?:remaster|version|mix|edit|mono|stereo).*$/i, "").trim();
+
+    logger.debug(`Base title comparison: "${baseItemTitle}" vs "${baseTrackTitle}"`);
+
+    if (baseItemTitle === baseTrackTitle) {
+      logger.debug(`Found base title match for track: "${item.title}"`);
+      return item;
+    }
+
+    // Check for substring match (if one contains the other)
+    if (baseItemTitle.includes(baseTrackTitle) || baseTrackTitle.includes(baseItemTitle)) {
+      logger.debug(`Found substring match: "${baseItemTitle}" contains or is contained in "${baseTrackTitle}"`);
+      return item;
+    }
+
+    // Check for similarity by removing special characters
+    const cleanItemTitle = baseItemTitle.replace(/[^\w\s]/g, "").trim();
+    const cleanTrackTitle = baseTrackTitle.replace(/[^\w\s]/g, "").trim();
+
+    if (cleanItemTitle === cleanTrackTitle) {
+      logger.debug(`Found match after removing special characters: "${cleanItemTitle}" = "${cleanTrackTitle}"`);
+      return item;
+    }
+  }
+
+  return undefined;
 }
 
 async function findTrackInSearchResults(
@@ -696,8 +796,11 @@ function findMatchingTrack(items: Item[], track: Track): Item | undefined {
     // This handles cases where the artist is part of a collaboration
     const isMatch =
       normalizedItemArtist.includes(normalizedTrackArtist) ||
+      normalizedTrackArtist.includes(normalizedItemArtist) ||
       // Also check if any part of a multi-artist subtitle contains our artist
-      normalizedItemArtist.split(/\s+/).some((part) => normalizedTrackArtist.includes(part) && part.length > 3);
+      normalizedItemArtist.split(/\s+/).some((part) => normalizedTrackArtist.includes(part) && part.length > 3) ||
+      // Check for similarity by removing all special characters
+      normalizedItemArtist.replace(/[^\w\s]/g, "") === normalizedTrackArtist.replace(/[^\w\s]/g, "");
 
     if (isMatch) {
       logger.debug(`Found artist match: ${item.subtitle}`);
@@ -737,6 +840,33 @@ function findMatchingTrack(items: Item[], track: Track): Item | undefined {
     if (cleanMatch) {
       logger.debug(`Found clean title match: ${cleanMatch.title}`);
       return cleanMatch;
+    }
+
+    // Try matching with common word variations
+    const variationMatch = artistMatches.find((item) => {
+      const itemTitle = normalizeString(item.title);
+
+      // Handle common variations
+      if (normalizedTrackTitle === "get down" && (itemTitle === "getdown" || itemTitle === "get-down")) {
+        return true;
+      }
+      if (normalizedTrackTitle === "get back" && (itemTitle === "getback" || itemTitle === "get-back")) {
+        return true;
+      }
+
+      // Handle apostrophe variations
+      const trackWithoutApostrophes = normalizedTrackTitle.replace(/'/g, "");
+      const itemWithoutApostrophes = itemTitle.replace(/'/g, "");
+      if (trackWithoutApostrophes === itemWithoutApostrophes) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (variationMatch) {
+      logger.debug(`Found variation match: ${variationMatch.title}`);
+      return variationMatch;
     }
 
     // If still no match, try substring matching

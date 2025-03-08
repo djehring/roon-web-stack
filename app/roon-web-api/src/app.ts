@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as net from "net";
 import * as process from "process";
 import { buildLoggerOptions, hostInfo, logger } from "@infrastructure";
-import { clientManager, gracefulShutdownHook } from "@service";
+import { clientManager, gracefulShutdownHook, startScheduledTasks, stopScheduledTasks } from "@service";
 import apiRoute from "./route/api-route";
 import appRoute from "./route/app-route";
 
@@ -97,6 +97,18 @@ const init = async (): Promise<void> => {
     gracefulShutDownHttps.setReady();
 
     await clientManager.start();
+
+    // Start scheduled tasks
+    startScheduledTasks();
+
+    // Register cleanup handler for scheduled tasks
+    process.on("SIGINT", () => {
+      stopScheduledTasks();
+    });
+
+    process.on("SIGTERM", () => {
+      stopScheduledTasks();
+    });
   } catch (err: unknown) {
     if (err instanceof Error) {
       httpServer.log.error(err.message);

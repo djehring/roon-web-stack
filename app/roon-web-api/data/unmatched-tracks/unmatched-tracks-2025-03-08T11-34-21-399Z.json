@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-03-08T11:34:21.402Z",
+  "count": 1,
+  "tracks": [
+    {
+      "artist": "",
+      "track": "",
+      "album": "Test Album",
+      "error": "Missing artist or track name"
+    }
+  ]
+}

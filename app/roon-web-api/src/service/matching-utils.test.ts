@@ -115,6 +115,26 @@ describe("matching-utils", () => {
       expect(result).toEqual(albums.items[0]);
     });
 
+    it("should handle apostrophes in artist names", () => {
+      const albums = createAlbumsList([
+        {
+          title: "Back to Front",
+          subtitle: "[[123|Gilbert O'Sullivan]]",
+          item_key: "key1",
+        },
+      ]);
+
+      // Test with apostrophe
+      let track = createTrack("Back to Front", "Gilbert O'Sullivan");
+      let result = matchAlbumInList(albums, track);
+      expect(result).toEqual(albums.items[0]);
+
+      // Test without apostrophe
+      track = createTrack("Back to Front", "Gilbert OSullivan");
+      result = matchAlbumInList(albums, track);
+      expect(result).toEqual(albums.items[0]);
+    });
+
     it("should handle multiple albums with same title but different artists", () => {
       const albums = createAlbumsList([
         {

@@ -14,6 +14,11 @@ import {
 import { clientManager } from "@service";
 import { fetchTrackStory, fetchTrackSuggestions, transcribeAudio } from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
+import {
+  analyzeUnmatchedTracks,
+  cleanupOldUnmatchedTracksData,
+  getLatestUnmatchedTracks,
+} from "../service/unmatched-tracks-analyzer";
 
 interface ClientIdParam {
   client_id: string;
@@ -237,6 +242,64 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       } catch (error) {
         logger.error(error, "Error processing audio file");
         return reply.status(500).send({ error: "Error processing audio file" });
+      }
+    }
+  );
+
+  // Endpoint to get unmatched tracks analysis
+  server.get<{ Params: { client_id: string } }>("/:client_id/unmatched-tracks/analysis", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (!client) {
+      return badRequestReply;
+    }
+
+    try {
+      const analysis = await analyzeUnmatchedTracks();
+      return await reply.status(200).send(analysis);
+    } catch (error) {
+      logger.error(`Error getting unmatched tracks analysis: ${JSON.stringify(error)}`);
+      return await reply.status(500).send({ error: "Failed to analyze unmatched tracks" });
+    }
+  });
+
+  // Endpoint to get the latest unmatched tracks data
+  server.get<{ Params: { client_id: string } }>("/:client_id/unmatched-tracks/latest", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (!client) {
+      return badRequestReply;
+    }
+
+    try {
+      const latestData = await getLatestUnmatchedTracks();
+      if (!latestData) {
+        return await reply.status(404).send({ error: "No unmatched tracks data found" });
+      }
+      return await reply.status(200).send(latestData);
+    } catch (error) {
+      logger.error(`Error getting latest unmatched tracks: ${JSON.stringify(error)}`);
+      return await reply.status(500).send({ error: "Failed to get latest unmatched tracks" });
+    }
+  });
+
+  // Endpoint to clean up old unmatched tracks data
+  server.post<{ Params: { client_id: string }; Body: { keepCount?: number } }>(
+    "/:client_id/unmatched-tracks/cleanup",
+    async (req, reply) => {
+      const { client, badRequestReply } = getClient(req, reply);
+      if (!client) {
+        return badRequestReply;
+      }
+
+      try {
+        const keepCount = req.body.keepCount ?? 10;
+        await cleanupOldUnmatchedTracksData(keepCount);
+        return await reply.status(200).send({
+          success: true,
+          message: `Cleaned up old unmatched tracks data, keeping ${keepCount} most recent files`,
+        });
+      } catch (error) {
+        logger.error(`Error cleaning up unmatched tracks data: ${JSON.stringify(error)}`);
+        return await reply.status(500).send({ error: "Failed to clean up unmatched tracks data" });
       }
     }
   );

@@ -1,6 +1,77 @@
 mat-dialog-content {
-  max-height: 300px;
+  max-height: 70vh;
   overflow: auto;
+  padding: 16px;
+}
+
+.track-item {
+  margin-bottom: 16px;
+  height: auto !important;
+  min-height: 48px;
+}
+
+.track-info {
+  width: 100%;
+  padding: 8px 0;
+}
+
+.track-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.track-album-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.album-label {
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.album-name {
+  font-style: italic;
+  word-break: break-word;
+}
+
+.corrected-icon {
+  color: #4caf50;
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
+  margin-left: 8px;
+}
+
+.track-correction {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 4px;
+  color: #2196f3;
+  font-size: 14px;
+}
+
+.track-error {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 4px;
+  color: #f44336;
+  font-size: 14px;
+}
+
+.info-icon, .error-icon {
+  font-size: 16px;
+  height: 16px;
+  width: 16px;
+  margin-right: 4px;
+  margin-top: 2px;
+}
+
+mat-list {
+  padding: 0;
 }
 
 mat-list-item {

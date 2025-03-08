@@ -32,15 +32,23 @@ export function normalizeArtistName(name: string): string {
   logger.debug(`Normalizing artist name: "${name}"`);
 
   // First normalize the string using our base function
-  const normalized = normalizeString(name)
+  let normalized = normalizeString(name)
     // Handle common name variations
     .replace(/stephan/g, "stephane")
     .replace(/steven/g, "stephen")
-    // Explicitly handle Sinéad O'Connor variations
-    .replace(/sinead/g, "sinead")
-    .replace(/sinéad/g, "sinead")
-    .replace(/oconnor/g, "oconnor")
-    .replace(/o'connor/g, "oconnor");
+    .replace(/sinéad/g, "sinead");
+
+  // Generic handling for names with apostrophes like O'Sullivan, D'Angelo, etc.
+  // First, handle the case where there's a space after O, Mc, Mac, etc.
+  normalized = normalized.replace(
+    /\b(o|mc|mac)\s+([a-z])/gi,
+    (match: string, prefix: string, letter: string): string => {
+      return prefix + letter;
+    }
+  );
+
+  // Then remove all apostrophes
+  normalized = normalized.replace(/'/g, "");
 
   // Split on commas and 'and' to handle collaborations
   const parts = normalized.split(/,|\band\b/).map((p) => p.trim());

@@ -122,5 +122,17 @@ describe("string-utils", () => {
       expect(normalizeArtistName("Sigur Rós")).toBe("sigur ros");
       expect(normalizeArtistName("Mônica Salmaso")).toBe("monica salmaso");
     });
+
+    it("should handle Gilbert O'Sullivan variations", () => {
+      expect(normalizeArtistName("Gilbert O'Sullivan")).toBe("gilbert osullivan");
+      expect(normalizeArtistName("Gilbert OSullivan")).toBe("gilbert osullivan");
+      expect(normalizeArtistName("Gilbert O Sullivan")).toBe("gilbert osullivan");
+    });
+
+    it("should remove apostrophes consistently", () => {
+      expect(normalizeArtistName("D'Angelo")).toBe("dangelo");
+      expect(normalizeArtistName("Guns N' Roses")).toBe("guns n roses");
+      expect(normalizeArtistName("Destiny's Child")).toBe("destinys child");
+    });
   });
 });

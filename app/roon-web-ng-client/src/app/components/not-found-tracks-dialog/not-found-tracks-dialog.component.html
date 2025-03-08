@@ -2,8 +2,27 @@
 <mat-dialog-content>
   <p>The following tracks were not found:</p>
   <mat-list>
-    <mat-list-item *ngFor="let track of data">
-      {{ track.track }} by {{ track.artist }}
+    <mat-list-item *ngFor="let track of data" class="track-item">
+      <div class="track-info">
+        <div class="track-title">{{ track.track }} by {{ track.artist }}</div>
+        <div class="track-album-info">
+          <span class="album-label">Album: </span> 
+          <span class="album-name">{{ track.album || 'Unknown' }}</span>
+          <mat-icon *ngIf="track.wasAutoCorrected" 
+            class="corrected-icon" 
+            matTooltip="Album was automatically corrected">
+            auto_fix_high
+          </mat-icon>
+        </div>
+        <div *ngIf="track.correctionMessage" class="track-correction">
+          <mat-icon class="info-icon">info</mat-icon>
+          <span>{{ track.correctionMessage }}</span>
+        </div>
+        <div *ngIf="track.error && !track.wasAutoCorrected" class="track-error">
+          <mat-icon class="error-icon">error</mat-icon>
+          <span>{{ track.error }}</span>
+        </div>
+      </div>
     </mat-list-item>
   </mat-list>
 </mat-dialog-content>

@@ -14,6 +14,7 @@ const config = {
   output: {
     path: path.resolve(__dirname, "bin"),
     filename: "app.js",
+    devtoolModuleFilenameTemplate: '[absolute-resource-path]',
   },
   plugins: [
     new ESLintPlugin({
@@ -27,7 +28,9 @@ const config = {
       cache: false,
       configType: "flat",
     }),
-    new NodemonPlugin(),
+    new NodemonPlugin({
+      nodeArgs: ['--inspect'],
+    }),
     new webpack.DefinePlugin({
       'process.env.npm_package_version': JSON.stringify(package.version)
     })
@@ -36,7 +39,14 @@ const config = {
     rules: [
       {
         test: /\.ts$/,
-        use: require.resolve("ts-loader"),
+        use: {
+          loader: require.resolve("ts-loader"),
+          options: {
+            compilerOptions: {
+              sourceMap: true,
+            },
+          },
+        },
         exclude: /node_modules/,
       },
     ],
@@ -57,7 +67,7 @@ module.exports = () => {
     config.devtool = "source-map";
   } else {
     config.mode = "development";
-    config.devtool = "inline-source-map"
+    config.devtool = "source-map";
   }
   return config;
 };

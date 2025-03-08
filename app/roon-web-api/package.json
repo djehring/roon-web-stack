@@ -6,11 +6,14 @@
   "license": "MIT",
   "scripts": {
     "build": "yarn run clean && yarn webpack",
+    "build:debug": "yarn run clean && yarn webpack --mode=development --devtool=source-map",
     "clean": "rimraf bin",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "start:debug": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=development NODE_OPTIONS='--no-deprecation' LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
-    "start:prod": "kill-port 3443 && yarn run clean && cross-env NODE_ENV=production NODE_OPTIONS='--no-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
+    "kill-ports": "kill-port 3000 3443 || true",
+    "start:debug": "yarn kill-ports && sleep 1 && yarn run clean && cross-env NODE_ENV=development NODE_OPTIONS='--no-deprecation' LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
+    "start:prod": "yarn kill-ports && sleep 1 && yarn run clean && cross-env NODE_ENV=production NODE_OPTIONS='--no-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
+    "debug": "yarn build:debug && yarn kill-ports && sleep 1 && cross-env NODE_ENV=development LOG_LEVEL=debug node --inspect bin/app.js | pino-pretty",
     "test": "jest"
   },
   "dependencies": {
@@ -19,6 +22,8 @@
     "@fastify/static": "8.0.3",
     "@gquittet/graceful-server": "4.0.9",
     "@types/fastify-multipart": "^0.7.2",
+    "axios": "^1.8.2",
+    "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
     "fastify": "5.2.0",
     "fastify-plugin": "5.0.1",

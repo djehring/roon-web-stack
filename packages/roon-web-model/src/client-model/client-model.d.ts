@@ -13,6 +13,9 @@ export interface SuggestedTrack {
   artist: string;
   album: string;
   track: string;
+  error?: string;
+  wasAutoCorrected?: boolean;
+  correctionMessage?: string;
 }
 
 export interface TrackStory {
