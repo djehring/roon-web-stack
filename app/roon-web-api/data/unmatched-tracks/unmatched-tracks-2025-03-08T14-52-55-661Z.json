@@ -1,0 +1,22 @@
+{
+  "timestamp": "2025-03-08T14:52:55.661Z",
+  "count": 2,
+  "tracks": [
+    {
+      "artist": "SHABBA RANKS",
+      "track": "MR LOVERMAN {1993}",
+      "album": "X-tra Naked",
+      "error": "Track not found on GPT-suggested album \"X-tra Naked\"",
+      "wasAutoCorrected": true,
+      "correctionMessage": "Album found via AI: \"X-tra Naked\""
+    },
+    {
+      "artist": "THERAPY?",
+      "track": "SHORTSHARPSHOCK (EP)",
+      "album": "Shortsharpshock EP",
+      "error": "Track not found on GPT-suggested album \"Shortsharpshock EP\"",
+      "wasAutoCorrected": true,
+      "correctionMessage": "Album found via AI: \"Shortsharpshock EP\""
+    }
+  ]
+}

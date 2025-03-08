@@ -1,4 +1,4 @@
-import { NgForOf, NgIf } from "@angular/common";
+import { NgClass, NgForOf, NgIf } from "@angular/common";
 import { Component, Inject } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from "@angular/material/dialog";
@@ -12,7 +12,7 @@ import { SuggestedTrack } from "@model";
   templateUrl: "./not-found-tracks-dialog.component.html",
   styleUrls: ["./not-found-tracks-dialog.component.scss"],
   standalone: true,
-  imports: [MatDialogModule, MatButtonModule, MatListModule, MatIconModule, MatTooltipModule, NgForOf, NgIf],
+  imports: [MatDialogModule, MatButtonModule, MatListModule, MatIconModule, MatTooltipModule, NgForOf, NgIf, NgClass],
 })
 export class NotFoundTracksDialogComponent {
   constructor(

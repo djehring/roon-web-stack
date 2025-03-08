@@ -1,0 +1,30 @@
+{
+  "timestamp": "2025-03-08T14:54:19.225Z",
+  "count": 3,
+  "tracks": [
+    {
+      "artist": "JOE BROWN",
+      "track": "THAT'S WHAT LOVE WILL DO",
+      "album": "The Ukulele Album",
+      "error": "Track not found on GPT-suggested album \"The Ukulele Album\"",
+      "wasAutoCorrected": true,
+      "correctionMessage": "Album found via AI: \"The Ukulele Album\""
+    },
+    {
+      "artist": "BOBBY VEE",
+      "track": "THE NIGHT HAS A THOUSAND EYES",
+      "album": "The Night Has a Thousand Eyes",
+      "error": "Track not found on GPT-suggested album \"The Night Has a Thousand Eyes\"",
+      "wasAutoCorrected": true,
+      "correctionMessage": "Album found via AI: \"The Night Has a Thousand Eyes\""
+    },
+    {
+      "artist": "FRANK IFIELD",
+      "track": "WAYWARD WIND",
+      "album": "I'll Remember You",
+      "error": "Track not found on GPT-suggested album \"I'll Remember You\"",
+      "wasAutoCorrected": true,
+      "correctionMessage": "Album found via AI: \"I'll Remember You\""
+    }
+  ]
+}

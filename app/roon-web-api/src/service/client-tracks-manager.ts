@@ -8,6 +8,7 @@ import {
   RoonApiBrowseOptions,
   RoonApiBrowseResponse,
 } from "@model";
+import { findTrackWithGPT } from "../ai-service/chatgpt";
 import { Track } from "../ai-service/types/track";
 import { matchAlbumInList } from "./matching-utils";
 import { browseIntoLibrary, getLibrarySearchItem, resetBrowseSession, searchForAlbumWithTitle } from "./roon-utils";
@@ -108,11 +109,64 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
         logger.debug({ track, wasStartPlay: startPlay }, "Track found via direct search");
         startPlay = false;
       } else {
-        logger.debug({ track }, "Track not found in any search method");
-        if (!track.error) {
-          track.error = "Track not found in library";
+        // Try artist-then-track search as a fallback
+        logger.debug({ track }, "Direct search failed, trying artist-then-track search");
+        const artistTrackFound = await findTrackByArtistThenTrack(track, browseOptions, startPlay);
+
+        if (artistTrackFound) {
+          logger.debug({ track, wasStartPlay: startPlay }, "Track found via artist-then-track search");
+          startPlay = false;
+        } else {
+          // Final fallback: Use GPT to find the correct album
+          logger.debug({ track }, "All search methods failed, trying GPT-based album search");
+
+          try {
+            // Get album suggestion from GPT
+            const updatedTrack = await findTrackWithGPT(track);
+
+            // Only proceed if we got a different album than before
+            if (updatedTrack.album && updatedTrack.album !== track.album && updatedTrack.wasAutoCorrected) {
+              logger.debug(`GPT suggested album: "${updatedTrack.album}" for track: ${track.track}`);
+
+              // Try album-based search with the updated album information
+              await resetBrowseSession(browseOptions.multi_session_key, "search");
+              const foundTrack = await findTrackByAlbum(updatedTrack, browseOptions);
+
+              if (foundTrack) {
+                logger.debug(`Found track via GPT album search: ${foundTrack.title}`);
+                try {
+                  // Use album-specific playback for tracks found via GPT album search
+                  await playAlbumTrack(foundTrack, browseOptions, startPlay);
+                  startPlay = false;
+                  continue;
+                } catch (error) {
+                  logger.error(`Error playing GPT-suggested album track ${track.track}: ${JSON.stringify(error)}`);
+                  // Fall through to marking as not found
+                }
+              } else {
+                logger.debug(`Track "${track.track}" not found on GPT-suggested album "${updatedTrack.album}"`);
+                // Keep the GPT suggestion in the error message
+                track.error = `Track not found on GPT-suggested album "${updatedTrack.album}"`;
+                track.album = updatedTrack.album; // Update the album for future reference
+                track.wasAutoCorrected = true;
+                track.correctionMessage = updatedTrack.correctionMessage;
+              }
+            } else {
+              logger.debug(`GPT did not provide a useful album suggestion for: ${track.track}`);
+              if (!track.error) {
+                track.error = "Track not found in library";
+              }
+            }
+          } catch (gptError) {
+            logger.error(`Error using GPT to find album for ${track.track}: ${JSON.stringify(gptError)}`);
+            if (!track.error) {
+              track.error = "Track not found in library";
+            }
+          }
+
+          // Add to unmatched tracks regardless of GPT result
+          unmatchedTracks.push(track);
         }
-        unmatchedTracks.push(track);
       }
     } catch (error) {
       logger.error(`Error processing track ${track.artist} - ${track.track}: ${JSON.stringify(error)}`);
@@ -979,5 +1033,210 @@ async function playAlbumTrack(
   } catch (error) {
     logger.error(`Error in playAlbumTrack for ${track.title}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Searches for a track by first finding the artist and then looking for the track
+ * in the artist's catalog. This is a fallback method when direct track search fails.
+ */
+async function findTrackByArtistThenTrack(
+  track: Track,
+  browseOptions: RoonApiBrowseOptions,
+  startPlay: boolean
+): Promise<boolean> {
+  logger.debug({ track, startPlay }, "Searching for track by artist-then-track method");
+  try {
+    // Reset browse session for a fresh search
+    await resetBrowseSession(browseOptions.multi_session_key, "search");
+
+    // Search specifically for the artist
+    const searchOptions = {
+      ...browseOptions,
+      hierarchy: "search",
+      input: track.artist,
+      pop_all: true,
+    };
+
+    const searchResponse = await roon.browse(searchOptions);
+
+    if (searchResponse.action !== "list" || !searchResponse.list) {
+      logger.debug(`No search results found for artist: ${track.artist}`);
+      return false;
+    }
+
+    const loadResponse = await loadSearchResults(browseOptions.multi_session_key);
+    if (!loadResponse.items.length) {
+      logger.error("Invalid load response for artist search:", loadResponse);
+      return false;
+    }
+
+    logger.debug({ items: loadResponse.items.map((i) => i.title) }, "Artist search results loaded");
+
+    // Look for the artist section
+    const artistsItem = loadResponse.items.find((item) => item.title === "Artists" && item.hint === "list");
+
+    if (!artistsItem) {
+      logger.debug(`No 'Artists' section found for: ${track.artist}`);
+      return false;
+    }
+
+    // Browse into the Artists section
+    const artistsResponse = await roon.browse({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      item_key: artistsItem.item_key,
+    });
+
+    if (artistsResponse.action !== "list" || !artistsResponse.list) {
+      logger.debug(`No list for Artists section: ${track.artist}`);
+      return false;
+    }
+
+    // Load the artists list
+    const artistsLoadResponse = await roon.load({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      level: 1,
+      offset: 0,
+      count: 100,
+    });
+
+    // Find the matching artist
+    const normalizedArtistName = normalizeArtistName(track.artist);
+    const artistMatch = artistsLoadResponse.items.find((item) => {
+      const itemArtistName = normalizeArtistName(item.title);
+      return (
+        itemArtistName === normalizedArtistName ||
+        itemArtistName.includes(normalizedArtistName) ||
+        normalizedArtistName.includes(itemArtistName) ||
+        // Handle "The" prefix variations
+        itemArtistName.replace(/^the\s+/i, "") === normalizedArtistName.replace(/^the\s+/i, "")
+      );
+    });
+
+    if (!artistMatch) {
+      logger.debug(`No matching artist found for: ${track.artist}`);
+      return false;
+    }
+
+    logger.debug(`Found matching artist: ${artistMatch.title}`);
+
+    // Browse into the artist
+    const artistResponse = await roon.browse({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      item_key: artistMatch.item_key,
+    });
+
+    if (artistResponse.action !== "list" || !artistResponse.list) {
+      logger.debug(`No list for artist: ${artistMatch.title}`);
+      return false;
+    }
+
+    // Load the artist's content
+    const artistContentResponse = await roon.load({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      level: 1,
+      offset: 0,
+      count: 100,
+    });
+
+    // Look for the Tracks section in the artist's content
+    const tracksItem = artistContentResponse.items.find(
+      (item) => (item.title === "Tracks" || item.title === "Top Tracks") && item.hint === "list"
+    );
+
+    if (!tracksItem) {
+      logger.debug(`No 'Tracks' section found for artist: ${artistMatch.title}`);
+      return false;
+    }
+
+    // Browse into the Tracks section
+    const tracksResponse = await roon.browse({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      item_key: tracksItem.item_key,
+    });
+
+    if (tracksResponse.action !== "list" || !tracksResponse.list) {
+      logger.debug(`No list for Tracks section of artist: ${artistMatch.title}`);
+      return false;
+    }
+
+    // Load the tracks
+    const tracksLoadResponse = await roon.load({
+      hierarchy: "search",
+      multi_session_key: browseOptions.multi_session_key,
+      level: 1,
+      offset: 0,
+      count: 100,
+    });
+
+    // Find the matching track
+    const normalizedTrackTitle = normalizeString(track.track);
+
+    // First try exact match
+    let matchingTrack = tracksLoadResponse.items.find((item) => normalizeString(item.title) === normalizedTrackTitle);
+
+    // If no exact match, try more flexible matching
+    if (!matchingTrack) {
+      matchingTrack = tracksLoadResponse.items.find((item) => {
+        const itemTitle = normalizeString(item.title);
+
+        // Try without parentheses
+        const cleanItemTitle = itemTitle.replace(/\s*\([^)]*\)/g, "").trim();
+        const cleanTrackTitle = normalizedTrackTitle.replace(/\s*\([^)]*\)/g, "").trim();
+
+        if (cleanItemTitle === cleanTrackTitle) {
+          return true;
+        }
+
+        // Try substring matching
+        if (itemTitle.includes(normalizedTrackTitle) || normalizedTrackTitle.includes(itemTitle)) {
+          return true;
+        }
+
+        // Try without apostrophes
+        const itemWithoutApostrophes = itemTitle.replace(/'/g, "");
+        const trackWithoutApostrophes = normalizedTrackTitle.replace(/'/g, "");
+
+        if (itemWithoutApostrophes === trackWithoutApostrophes) {
+          return true;
+        }
+
+        return false;
+      });
+    }
+
+    if (!matchingTrack) {
+      logger.debug(`No matching track found for: ${track.track} by artist: ${artistMatch.title}`);
+      return false;
+    }
+
+    logger.debug(`Found matching track: ${matchingTrack.title} by artist: ${artistMatch.title}`);
+
+    // Queue the track
+    try {
+      await queueSingleTrack(
+        {
+          title: matchingTrack.title,
+          artist: artistMatch.title,
+          image: matchingTrack.image_key ?? "",
+          itemKey: matchingTrack.item_key ?? "",
+          zoneId: browseOptions.zone_or_output_id ?? "",
+        },
+        browseOptions,
+        startPlay
+      );
+      return true;
+    } catch (error) {
+      logger.error(`Error queueing track ${track.track}: ${JSON.stringify(error)}`);
+      return false;
+    }
+  } catch (error) {
+    logger.error(`Error in findTrackByArtistThenTrack for ${track.track}: ${JSON.stringify(error)}`);
+    return false;
   }
 }

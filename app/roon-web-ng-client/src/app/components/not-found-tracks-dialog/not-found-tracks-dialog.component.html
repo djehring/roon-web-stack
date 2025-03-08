@@ -8,17 +8,29 @@
         <div class="track-album-info">
           <span class="album-label">Album: </span> 
           <span class="album-name">{{ track.album || 'Unknown' }}</span>
-          <mat-icon *ngIf="track.wasAutoCorrected" 
+          <mat-icon *ngIf="track.wasAutoCorrected && track.correctionMessage?.includes('AI')" 
+            class="ai-icon" 
+            matTooltip="Album suggested by AI">
+            smart_toy
+          </mat-icon>
+          <mat-icon *ngIf="track.wasAutoCorrected && !track.correctionMessage?.includes('AI')" 
             class="corrected-icon" 
             matTooltip="Album was automatically corrected">
             auto_fix_high
           </mat-icon>
         </div>
-        <div *ngIf="track.correctionMessage" class="track-correction">
-          <mat-icon class="info-icon">info</mat-icon>
+        <div *ngIf="track.correctionMessage" class="track-correction" 
+             [ngClass]="{'ai-correction': track.correctionMessage.includes('AI')}">
+          <mat-icon class="info-icon" [ngClass]="{'ai-icon': track.correctionMessage.includes('AI')}">
+            {{ track.correctionMessage.includes('AI') ? 'smart_toy' : 'info' }}
+          </mat-icon>
           <span>{{ track.correctionMessage }}</span>
         </div>
         <div *ngIf="track.error && !track.wasAutoCorrected" class="track-error">
+          <mat-icon class="error-icon">error</mat-icon>
+          <span>{{ track.error }}</span>
+        </div>
+        <div *ngIf="track.error && track.wasAutoCorrected && track.correctionMessage?.includes('AI')" class="track-error ai-error">
           <mat-icon class="error-icon">error</mat-icon>
           <span>{{ track.error }}</span>
         </div>

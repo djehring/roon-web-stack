@@ -589,3 +589,89 @@ export async function transcribeAudio(audioFile: Buffer): Promise<string> {
     throw error;
   }
 }
+
+/**
+ * Uses GPT-4 to find the correct album for a track that wasn't found in the library.
+ * This is a last-resort method when all other search methods have failed.
+ * @param track The track that wasn't found
+ * @returns A Promise that resolves to a Track with updated album information
+ */
+export async function findTrackWithGPT(track: Track): Promise<Track> {
+  try {
+    if (!track.artist || !track.track) {
+      logger.error("Invalid track data for GPT search:", track);
+      return track;
+    }
+
+    logger.debug(`Using GPT to find correct album for: ${track.artist} - ${track.track}`);
+
+    const openaiInstance = getOpenAIInstance();
+    const response = await openaiInstance.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content: `You are a music database expert. Your task is to find the EXACT album information for a specific track.
+                    
+                    ***CRITICAL INSTRUCTIONS:***
+                    - Return ONLY the artist, track title, and album name in the format "Artist - Track - Album"
+                    - Do NOT include any explanations, notes, or additional text
+                    - Use the EXACT album name as it appears on streaming platforms
+                    - Prefer original studio albums over compilations or "Greatest Hits" collections
+                    - If multiple albums contain the track, choose the most popular or original release
+                    - If the track appears on multiple albums, choose the album where it was first released or is most commonly associated with
+                    - VERIFY that the track is actually on the album you suggest
+                    - DO NOT guess or assume - only return information you are certain about
+                    - If you cannot find a definitive album, return the original artist and track with "Unknown" as the album
+                    
+                    ***EXAMPLES:***
+                    - For "SPEAK LIKE A CHILD by THE STYLE COUNCIL", return "THE STYLE COUNCIL - SPEAK LIKE A CHILD - Introducing The Style Council"
+                    - For "Get Down by Gilbert O'Sullivan", return "Gilbert O'Sullivan - Get Down - I'm a Writer, Not a Fighter"
+                    - For "Why by Donny Osmond", return "Donny Osmond - Why - Too Young"
+                    - For "ROCK THE BOAT by FORREST", return "FORREST - ROCK THE BOAT - Feel The Need"
+                    - For "HIGH LIFE by MODERN ROMANCE", return "MODERN ROMANCE - HIGH LIFE - Trick Of The Light"`,
+        },
+        {
+          role: "user",
+          content: `Find the exact album for: ${track.track} by ${track.artist}`,
+        },
+      ],
+      max_tokens: 100,
+      temperature: 0.3,
+    });
+
+    const messageContent = response.choices[0].message.content;
+    if (!messageContent) {
+      logger.error("No content returned from GPT for track:", track);
+      return track;
+    }
+
+    // Parse the response
+    const parsedTrack = parseTrack(messageContent.trim());
+    if (!parsedTrack) {
+      logger.error("Failed to parse GPT response:", messageContent);
+      return track;
+    }
+
+    // Only update the album if we got a valid response
+    if (parsedTrack.album && parsedTrack.album !== "Unknown") {
+      // Create a new track with the updated album
+      const updatedTrack: Track = {
+        artist: track.artist, // Keep original artist
+        track: track.track, // Keep original track
+        album: parsedTrack.album, // Use the album from GPT
+        wasAutoCorrected: true,
+        correctionMessage: `Album found via AI: "${parsedTrack.album}"`,
+      };
+
+      logger.debug(`GPT found album for ${track.artist} - ${track.track}: ${parsedTrack.album}`);
+      return updatedTrack;
+    }
+
+    // If we didn't get a valid album, return the original track
+    return track;
+  } catch (error) {
+    logger.error("Error finding track with GPT:", error);
+    return track;
+  }
+}
