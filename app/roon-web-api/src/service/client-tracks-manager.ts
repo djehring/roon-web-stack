@@ -109,64 +109,55 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
         logger.debug({ track, wasStartPlay: startPlay }, "Track found via direct search");
         startPlay = false;
       } else {
-        // Try artist-then-track search as a fallback
-        logger.debug({ track }, "Direct search failed, trying artist-then-track search");
-        const artistTrackFound = await findTrackByArtistThenTrack(track, browseOptions, startPlay);
+        // Final fallback: Use GPT to find the correct album
+        logger.debug({ track }, "All search methods failed, trying GPT-based album search");
 
-        if (artistTrackFound) {
-          logger.debug({ track, wasStartPlay: startPlay }, "Track found via artist-then-track search");
-          startPlay = false;
-        } else {
-          // Final fallback: Use GPT to find the correct album
-          logger.debug({ track }, "All search methods failed, trying GPT-based album search");
+        try {
+          // Get album suggestion from GPT
+          const updatedTrack = await findTrackWithGPT(track);
 
-          try {
-            // Get album suggestion from GPT
-            const updatedTrack = await findTrackWithGPT(track);
+          // Only proceed if we got a different album than before
+          if (updatedTrack.album && updatedTrack.album !== track.album && updatedTrack.wasAutoCorrected) {
+            logger.debug(`GPT suggested album: "${updatedTrack.album}" for track: ${track.track}`);
 
-            // Only proceed if we got a different album than before
-            if (updatedTrack.album && updatedTrack.album !== track.album && updatedTrack.wasAutoCorrected) {
-              logger.debug(`GPT suggested album: "${updatedTrack.album}" for track: ${track.track}`);
+            // Try album-based search with the updated album information
+            await resetBrowseSession(browseOptions.multi_session_key, "search");
+            const foundTrack = await findTrackByAlbum(updatedTrack, browseOptions);
 
-              // Try album-based search with the updated album information
-              await resetBrowseSession(browseOptions.multi_session_key, "search");
-              const foundTrack = await findTrackByAlbum(updatedTrack, browseOptions);
-
-              if (foundTrack) {
-                logger.debug(`Found track via GPT album search: ${foundTrack.title}`);
-                try {
-                  // Use album-specific playback for tracks found via GPT album search
-                  await playAlbumTrack(foundTrack, browseOptions, startPlay);
-                  startPlay = false;
-                  continue;
-                } catch (error) {
-                  logger.error(`Error playing GPT-suggested album track ${track.track}: ${JSON.stringify(error)}`);
-                  // Fall through to marking as not found
-                }
-              } else {
-                logger.debug(`Track "${track.track}" not found on GPT-suggested album "${updatedTrack.album}"`);
-                // Keep the GPT suggestion in the error message
-                track.error = `Track not found on GPT-suggested album "${updatedTrack.album}"`;
-                track.album = updatedTrack.album; // Update the album for future reference
-                track.wasAutoCorrected = true;
-                track.correctionMessage = updatedTrack.correctionMessage;
+            if (foundTrack) {
+              logger.debug(`Found track via GPT album search: ${foundTrack.title}`);
+              try {
+                // Use album-specific playback for tracks found via GPT album search
+                await playAlbumTrack(foundTrack, browseOptions, startPlay);
+                startPlay = false;
+                continue;
+              } catch (error) {
+                logger.error(`Error playing GPT-suggested album track ${track.track}: ${JSON.stringify(error)}`);
+                // Fall through to marking as not found
               }
             } else {
-              logger.debug(`GPT did not provide a useful album suggestion for: ${track.track}`);
-              if (!track.error) {
-                track.error = "Track not found in library";
-              }
+              logger.debug(`Track "${track.track}" not found on GPT-suggested album "${updatedTrack.album}"`);
+              // Keep the GPT suggestion in the error message
+              track.error = `Track not found on GPT-suggested album "${updatedTrack.album}"`;
+              track.album = updatedTrack.album; // Update the album for future reference
+              track.wasAutoCorrected = true;
+              track.correctionMessage = updatedTrack.correctionMessage;
             }
-          } catch (gptError) {
-            logger.error(`Error using GPT to find album for ${track.track}: ${JSON.stringify(gptError)}`);
+          } else {
+            logger.debug(`GPT did not provide a useful album suggestion for: ${track.track}`);
             if (!track.error) {
               track.error = "Track not found in library";
             }
           }
-
-          // Add to unmatched tracks regardless of GPT result
-          unmatchedTracks.push(track);
+        } catch (gptError) {
+          logger.error(`Error using GPT to find album for ${track.track}: ${JSON.stringify(gptError)}`);
+          if (!track.error) {
+            track.error = "Track not found in library";
+          }
         }
+
+        // Add to unmatched tracks regardless of GPT result
+        unmatchedTracks.push(track);
       }
     } catch (error) {
       logger.error(`Error processing track ${track.artist} - ${track.track}: ${JSON.stringify(error)}`);
@@ -187,8 +178,7 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
 async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions): Promise<RoonApiBrowseResponse> {
   // Try different search variations
   const searchVariations = [
-    track.track, // Just the track name
-    `${track.artist} ${track.track}`, // Artist and track
+    `${track.track} by ${track.artist}`, // Artist and track
     // Handle parenthetical titles: "Main Title (Theme Name)"
     ...(track.track.includes("(")
       ? [
@@ -201,14 +191,14 @@ async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions):
     // Additional variations for better matching
     track.track.replace(/'/g, ""), // Without apostrophes
     track.track.replace(/\s+/g, " "), // Normalize spaces
-    // Handle common word variations
-    track.track.replace(/get down/i, "getdown"), // Handle "Get Down" variations
-    track.track.replace(/get back/i, "getback"), // Handle "Get Back" variations
-    // Try with just the artist name for broader search
-    track.artist,
   ].filter(Boolean);
 
-  for (const searchTerm of searchVariations) {
+  // Remove duplicates using Set
+  const uniqueSearchVariations = [...new Set(searchVariations)];
+
+  logger.debug(`Search variations for "${track.track}": ${JSON.stringify(uniqueSearchVariations)}`);
+
+  for (const searchTerm of uniqueSearchVariations) {
     logger.debug(`Trying search term: ${searchTerm}`);
     const searchOptions = {
       ...browseOptions,
@@ -227,7 +217,7 @@ async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions):
   return roon.browse({
     ...browseOptions,
     hierarchy: "search",
-    input: `${track.artist} ${track.track}`,
+    input: `${track.track} by ${track.artist}`,
     pop_all: true,
   });
 }
@@ -1040,6 +1030,7 @@ async function playAlbumTrack(
  * Searches for a track by first finding the artist and then looking for the track
  * in the artist's catalog. This is a fallback method when direct track search fails.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function findTrackByArtistThenTrack(
   track: Track,
   browseOptions: RoonApiBrowseOptions,

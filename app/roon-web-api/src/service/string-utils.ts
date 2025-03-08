@@ -36,7 +36,9 @@ export function normalizeArtistName(name: string): string {
     // Handle common name variations
     .replace(/stephan/g, "stephane")
     .replace(/steven/g, "stephen")
-    .replace(/sinéad/g, "sinead");
+    .replace(/sinéad/g, "sinead")
+    // Remove "The " from the beginning of artist names
+    .replace(/^the\s+/i, "");
 
   // Generic handling for names with apostrophes like O'Sullivan, D'Angelo, etc.
   // First, handle the case where there's a space after O, Mc, Mac, etc.

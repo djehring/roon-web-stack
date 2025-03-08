@@ -10,10 +10,10 @@
     "clean": "rimraf bin",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "kill-ports": "kill-port 3000 3443 || true",
-    "start:debug": "yarn kill-ports && sleep 1 && yarn run clean && cross-env NODE_ENV=development NODE_OPTIONS='--no-deprecation' LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
-    "start:prod": "yarn kill-ports && sleep 1 && yarn run clean && cross-env NODE_ENV=production NODE_OPTIONS='--no-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
-    "debug": "yarn build:debug && yarn kill-ports && sleep 1 && cross-env NODE_ENV=development LOG_LEVEL=debug node --inspect bin/app.js | pino-pretty",
+    "kill-ports": "kill-port 3000 || true && kill-port 3443 || true",
+    "start:debug": "cross-env NODE_ENV=development NODE_OPTIONS='--no-deprecation' LOG_LEVEL=debug yarn webpack --watch | pino-pretty",
+    "start:prod": "cross-env NODE_ENV=production NODE_OPTIONS='--no-deprecation' LOG_LEVEL=info yarn webpack --watch | pino-pretty",
+    "debug": "yarn build:debug && cross-env NODE_ENV=development LOG_LEVEL=debug node --inspect bin/app.js | pino-pretty",
     "test": "jest"
   },
   "dependencies": {

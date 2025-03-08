@@ -31,7 +31,8 @@
     "deploy:nas": "./scripts/deploy-nas.sh",
     "patch.all": "yarn workspaces foreach --all version patch",
     "generate-favicons": "node scripts/generate-favicons.js",
-    "generate-test-icons": "node scripts/generate-test-icons.js"
+    "generate-test-icons": "node scripts/generate-test-icons.js",
+    "kill-ports": "yarn workspace @djehring/roon-web-api kill-ports"
   },
   "resolutions": {
     "punycode": "^2.3.1"

@@ -14,5 +14,6 @@ config.json
 .*
 .env
 /app/roon-web-api/cache
+/app/roon-web-api/data
 /roon-backend.tar
 /roon-web-app.tar

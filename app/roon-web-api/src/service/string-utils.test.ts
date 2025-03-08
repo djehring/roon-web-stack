@@ -134,5 +134,14 @@ describe("string-utils", () => {
       expect(normalizeArtistName("Guns N' Roses")).toBe("guns n roses");
       expect(normalizeArtistName("Destiny's Child")).toBe("destinys child");
     });
+
+    it("should remove 'The ' from the beginning of artist names", () => {
+      expect(normalizeArtistName("The Beatles")).toBe("beatles");
+      expect(normalizeArtistName("The Rolling Stones")).toBe("rolling stones");
+      expect(normalizeArtistName("The Shamen")).toBe("shamen");
+      expect(normalizeArtistName("The Who")).toBe("who");
+      // Should not affect "The" in the middle of a name
+      expect(normalizeArtistName("Rage Against The Machine")).toBe("rage against the machine");
+    });
   });
 });
