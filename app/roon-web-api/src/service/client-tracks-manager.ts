@@ -176,14 +176,16 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
 }
 
 async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions): Promise<RoonApiBrowseResponse> {
-  // Try different search variations
-  const searchVariations = [
-    `${track.track} by ${track.artist}`, // Artist and track
+  // Generate track name variations
+  const trackVariations = [
+    track.track, // Original track name
     // Handle parenthetical titles: "Main Title (Theme Name)"
     ...(track.track.includes("(")
       ? [
           track.track.replace(/\s*\([^)]*\)/, "").trim(), // Without parentheses
           track.track.match(/\((.*?)\)/)?.[1]?.trim() ?? "", // Just parenthetical content
+          // Handle cases like "(ALL OF A SUDDEN) MY HEART SINGS"
+          track.track.replace(/^\([^)]*\)\s*/, "").trim(), // Remove parenthetical content at the beginning
         ]
       : []),
     track.track.replace(/^the\s+/i, ""), // Without "the"
@@ -193,7 +195,18 @@ async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions):
     track.track.replace(/\s+/g, " "), // Normalize spaces
   ].filter(Boolean);
 
-  // Remove duplicates using Set
+  // Remove duplicates from track variations
+  const uniqueTrackVariations = [...new Set(trackVariations)];
+
+  // Create search variations in both formats: "Artist - Track" and "Track - Artist"
+  const searchVariations = [
+    ...uniqueTrackVariations.map((trackVar) => `${track.artist} - ${trackVar}`), // Artist - Track format
+    ...uniqueTrackVariations.map((trackVar) => `${trackVar} - ${track.artist}`), // Track - Artist format
+    // Also include the artist name alone as a fallback
+    track.artist,
+  ];
+
+  // Remove duplicates from final search variations
   const uniqueSearchVariations = [...new Set(searchVariations)];
 
   logger.debug(`Search variations for "${track.track}": ${JSON.stringify(uniqueSearchVariations)}`);
