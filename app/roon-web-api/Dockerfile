@@ -2,6 +2,7 @@ ARG ALPINE_VERSION=3.20
 ARG TARGETPLATFORM=linux/amd64
 
 FROM node:22-alpine${ALPINE_VERSION} AS builder
+RUN apk add --no-cache git
 RUN mkdir -p /usr/src/roon-web-stack
 WORKDIR /usr/src/roon-web-stack
 COPY . /usr/src/roon-web-stack
@@ -18,9 +19,9 @@ RUN mkdir /usr/src/app/config \
 ENV HOST=0.0.0.0
 COPY --from=builder /usr/local/bin/node /usr/local/bin/
 COPY --from=builder /usr/local/bin/docker-entrypoint.sh /usr/local/bin/
-COPY --from=builder /usr/src/roon-web-stack/.env.deploy /usr/src/app/.env
 ENTRYPOINT ["docker-entrypoint.sh"]
 RUN apk add --no-cache libstdc++ dumb-init
+RUN : > /usr/src/app/.env
 COPY --from=builder /usr/src/roon-web-stack/LICENSE ./LICENSE
 COPY --from=builder /usr/src/roon-web-stack/app/roon-web-api/node_modules ./node_modules
 COPY --from=builder /usr/src/roon-web-stack/app/roon-web-api/bin/app.js ./app.js
@@ -38,4 +39,5 @@ ENV SSL_KEY=/etc/ssl/private/localhost+4-key.pem
 ENV HTTPS=true
 
 # Expose HTTPS port
+EXPOSE 3000
 EXPOSE 3443
