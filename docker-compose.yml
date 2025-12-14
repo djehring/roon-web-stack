@@ -1,1 +1,22 @@
- 
+services:
+  roon-web-stack:
+    build:
+      context: .
+      dockerfile: app/roon-web-api/Dockerfile
+    container_name: roon-web-stack
+    ports:
+      - "3000:3000"
+      - "3443:3443"
+    volumes:
+      - roon-web-stack-config:/usr/src/app/config
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      HTTP_PORT: "3000"
+      HTTPS_PORT: "3443"
+      # Recommended for Docker Desktop on macOS (avoids UDP discovery issues)
+      ROON_CORE_HOST: "${ROON_CORE_HOST}"
+      ROON_CORE_PORT: "${ROON_CORE_PORT:-9330}"
+
+volumes:
+  roon-web-stack-config: {}

@@ -8,9 +8,12 @@ import { clientManager, gracefulShutdownHook, startScheduledTasks, stopScheduled
 import apiRoute from "./route/api-route";
 import appRoute from "./route/app-route";
 
-// Load environment variables and handle errors
+// Load environment variables.
+//
+// In containers (and many production setups) we rely on injected environment
+// variables rather than a local `.env` file, so missing `.env` must not be fatal.
 const result = dotenv.config();
-if (result.error) {
+if (result.error && (result.error as NodeJS.ErrnoException).code !== "ENOENT") {
   // eslint-disable-next-line no-console
   console.error("Error loading environment variables:", result.error);
   process.exit(1);
