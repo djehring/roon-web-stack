@@ -7,6 +7,8 @@ services:
     ports:
       - "3000:3000"
       - "3443:3443"
+      - "4200:3000"
+      - "4443:3443"
     volumes:
       - roon-web-stack-config:/usr/src/app/config
     environment:

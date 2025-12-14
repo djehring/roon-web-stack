@@ -6,6 +6,22 @@ import { fastifyStatic } from "@fastify/static";
 
 const appRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<void> => {
   await server.register(fastifyCompress);
+
+  // Some clients (notably iOS home screen shortcuts) may probe the favicons
+  // directory itself. Redirect to a concrete file to avoid 404 noise.
+  server.get("/assets/favicons", async (_req, reply) => {
+    return reply.redirect("/assets/favicons/favicon.ico");
+  });
+  server.get("/assets/favicons/", async (_req, reply) => {
+    return reply.redirect("/assets/favicons/favicon.ico");
+  });
+  server.get("/assets/fivicons", async (_req, reply) => {
+    return reply.redirect("/assets/favicons/favicon.ico");
+  });
+  server.get("/assets/fivicons/", async (_req, reply) => {
+    return reply.redirect("/assets/favicons/favicon.ico");
+  });
+
   return server.register(fastifyStatic, {
     root: path.join(__dirname, "web"),
     immutable: true,

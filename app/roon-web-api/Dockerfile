@@ -3,11 +3,9 @@ ARG TARGETPLATFORM=linux/amd64
 
 FROM node:22-alpine${ALPINE_VERSION} AS builder
 RUN apk add --no-cache git
-RUN mkdir -p /usr/src/roon-web-stack
 WORKDIR /usr/src/roon-web-stack
-COPY . /usr/src/roon-web-stack
-RUN corepack enable yarn && \
-    yarn workspaces focus @djehring/roon-web-api --production
+COPY . .
+RUN corepack enable yarn && yarn install && yarn build
 
 FROM alpine:${ALPINE_VERSION}
 WORKDIR /usr/src/app
