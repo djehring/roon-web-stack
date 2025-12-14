@@ -24,6 +24,9 @@ import { settingsOptions } from "./roon-extension-settings";
 
 export const extension_version = process.env.npm_package_version ?? "0.0.0";
 
+const ROON_CORE_HOST = process.env.ROON_CORE_HOST;
+const ROON_CORE_PORT = parseInt(process.env.ROON_CORE_PORT ?? "9330", 10);
+
 const extension: RoonExtension<ExtensionSettings> = new Extension({
   description: {
     extension_id: "roon-web-stack",
@@ -88,9 +91,24 @@ const startExtension = (): void => {
     mustBeStarted = false;
     onServerPaired(onServerPairedDefaultListener);
     onServerLost(onServerLostDefaultListener);
-    logger.info("starting discovery, don't forget to enable the extension in roon settings if needed.");
+    if (ROON_CORE_HOST) {
+      logger.info(`starting discovery and connecting to core at ${ROON_CORE_HOST}:${ROON_CORE_PORT}`);
+    } else {
+      logger.info("starting discovery, don't forget to enable the extension in roon settings if needed.");
+    }
     extension.start_discovery();
-    extension.set_status("starting...");
+    if (ROON_CORE_HOST) {
+      extension.set_status("connecting...");
+      extension.api().ws_connect({
+        host: ROON_CORE_HOST,
+        port: ROON_CORE_PORT,
+        onclose: () => {
+          logger.warn("core websocket connection closed");
+        },
+      });
+    } else {
+      extension.set_status("starting...");
+    }
   }
 };
 
