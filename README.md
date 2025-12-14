@@ -161,6 +161,23 @@ docker build -t nihiluxorg/roon-web-stack:latest -f app/roon-web-api/Dockerfile 
 ```
 Then you can use the `docker` command already mentioned to launch your freshly built image.
 
+#### Docker Desktop on macOS
+
+Docker Desktop on macOS does not support `--network host` and multicast UDP
+discovery from containers can be unreliable. To run the stack on macOS, set
+`ROON_CORE_HOST` (and optionally `ROON_CORE_PORT`, default `9100`) so the backend
+can connect directly to your Roon Core.
+
+This repo includes a ready-to-use compose file ([docker-compose.yml](./docker-compose.yml)):
+
+```bash
+# example
+export ROON_CORE_HOST=192.168.1.10
+docker compose up --build
+```
+
+Then open `https://localhost:3443/`.
+
 ## Some context
 
 This project is young and at its very early stage. It's just enough functionalities to be usable and I value the feedback from the community. The idea is to feed further development by these feedbacks.
