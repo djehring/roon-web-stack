@@ -17,3 +17,6 @@ config.json
 /app/roon-web-api/data
 /roon-backend.tar
 /roon-web-app.tar
+
+# Local dev TLS certs (never commit private keys)
+/certs/*.pem
