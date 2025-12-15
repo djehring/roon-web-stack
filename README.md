@@ -165,18 +165,121 @@ Then you can use the `docker` command already mentioned to launch your freshly b
 
 Docker Desktop on macOS does not support `--network host` and multicast UDP
 discovery from containers can be unreliable. To run the stack on macOS, set
-`ROON_CORE_HOST` (and optionally `ROON_CORE_PORT`, default `9100`) so the backend
+`ROON_CORE_HOST` (and optionally `ROON_CORE_PORT`, default `9330`) so the backend
 can connect directly to your Roon Core.
 
 This repo includes a ready-to-use compose file ([docker-compose.yml](./docker-compose.yml)):
 
 ```bash
 # example
-export ROON_CORE_HOST=192.168.1.10
+export ROON_CORE_HOST=192.168.0.14
 docker compose up --build
 ```
 
-Then open `https://localhost:3443/`.
+Then open one of:
+- `http://localhost:3000/` (HTTP)
+- `https://localhost:3443/` (HTTPS, self-signed)
+
+If you're using an iPhone home-screen shortcut and want it to keep working on
+port `4200`, see **Docker ports** below.
+
+## Docker architecture (this repo)
+
+This repository builds **one container** that serves:
+- **Frontend**: an Angular SPA (static files)
+- **Backend**: a Node/Fastify API that connects to Roon Core via `node-roon-api`
+
+### What runs inside the container
+
+- **Single Node process**: `node app.js`
+  - `app.js` is produced by webpack from [`app/roon-web-api/src/app.ts`](./app/roon-web-api/src/app.ts).
+  - The Node app starts **two Fastify servers**:
+    - **HTTP** on `HTTP_PORT` (default `3000`)
+    - **HTTPS** on `HTTPS_PORT` (default `3443`)
+  - Both servers register:
+    - [`api-route.ts`](./app/roon-web-api/src/route/api-route.ts) at `/api/*`
+    - [`app-route.ts`](./app/roon-web-api/src/route/app-route.ts) at `/*` (static SPA)
+
+### How the frontend is served
+
+- The Angular build output is copied into the image at `/usr/src/app/web`.
+- `fastify-static` serves that directory from `/` (and any non-`/api` paths).
+- The web manifest is under `/assets/favicons/manifest.webmanifest` and is
+  configured to launch the app at `/` (`start_url: "/"`, `scope: "/"`).
+
+### How the backend API is served
+
+- The API is served from the **same origin** under `/api`.
+  - Example: `GET /api/version` returns `204` and sets
+    `x-roon-web-stack-version`.
+- The API exposes endpoints for registering a client, SSE events, browsing,
+  images, commands, etc. (see [`api-route.ts`](./app/roon-web-api/src/route/api-route.ts)).
+
+### Roon Core discovery vs direct connect
+
+On Linux with `--network host`, UDP discovery typically works.
+
+On Docker Desktop (macOS), UDP discovery can be unreliable, so the stack supports
+**direct connect**:
+- Set `ROON_CORE_HOST=<ip-or-hostname>`
+- Optionally set `ROON_CORE_PORT=<port>` (default `9330`)
+
+### Docker image build flow (multi-stage)
+
+The Docker build is defined in [`app/roon-web-api/Dockerfile`](./app/roon-web-api/Dockerfile):
+
+- **Builder stage** (Node image)
+  - installs dependencies with Yarn
+  - runs `yarn build` for the monorepo
+    - builds the backend bundle (`app/roon-web-api/bin/app.js`)
+    - builds the Angular dist (`app/roon-web-ng-client/dist/.../browser`)
+- **Runtime stage** (Alpine)
+  - copies `app.js`, `node_modules`, and the Angular dist into the runtime image
+  - generates a local self-signed TLS cert inside the image (dev convenience)
+
+### Docker ports (including iPhone shortcut)
+
+Current compose mappings in [`docker-compose.yml`](./docker-compose.yml):
+- **`3000 -> 3000`**: HTTP
+- **`3443 -> 3443`**: HTTPS
+- **`4200 -> 3000`**: HTTP alias (useful for iPhone shortcut that used to be `:4200`)
+- **`4443 -> 3443`**: HTTPS alias
+
+Practical URLs:
+- Desktop: `http://localhost:3000/` or `https://localhost:3443/`
+- iPhone: `http://<your-mac-lan-ip>:4200/`
+  - iOS web clips often fetch icons better over HTTP than HTTPS with a
+    self-signed cert.
+
+### Start on boot
+
+#### Docker Desktop on macOS
+
+- Enable **Docker Desktop → Settings → General → "Start Docker Desktop when you log in"**.
+- In [`docker-compose.yml`](./docker-compose.yml), add `restart: unless-stopped`
+  to the service (recommended) so containers come back after reboot.
+- Then:
+
+```bash
+docker compose up -d
+```
+
+#### Linux / systemd (example)
+
+If you run this on a Linux host, you can use:
+- `restart: unless-stopped` in compose, and/or
+- a systemd unit that runs `docker compose up -d` at boot.
+
+### Troubleshooting: “frontend loads but backend isn’t running”
+
+Usually the backend *is* running (it’s the same process), but the UI may appear
+empty if it can’t pair to Roon Core.
+
+Checks:
+- **API reachable**: `GET http://<host>:3000/api/version` should return `204`.
+- **Roon pairing**: check container logs for “paired roon server”.
+- **Direct connect** (macOS): ensure `ROON_CORE_HOST` is set and `ROON_CORE_PORT`
+  matches your Core port range (commonly `9330-9339` on newer builds).
 
 ## Some context
 
