@@ -18,7 +18,7 @@ ENV HOST=0.0.0.0
 COPY --from=builder /usr/local/bin/node /usr/local/bin/
 COPY --from=builder /usr/local/bin/docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
-RUN apk add --no-cache libstdc++ dumb-init
+RUN apk add --no-cache libstdc++ dumb-init openssl
 RUN : > /usr/src/app/.env
 COPY --from=builder /usr/src/roon-web-stack/LICENSE ./LICENSE
 COPY --from=builder /usr/src/roon-web-stack/app/roon-web-api/node_modules ./node_modules
@@ -27,13 +27,17 @@ COPY --from=builder /usr/src/roon-web-stack/app/roon-web-ng-client/dist/roon-web
 USER node
 CMD ["dumb-init", "node", "app.js"]
 
-# Add SSL files
-COPY ./certs/localhost+4.pem /etc/ssl/certs/localhost+4.pem
-COPY ./certs/localhost+4-key.pem /etc/ssl/private/localhost+4-key.pem
+# Create local self-signed SSL cert (dev convenience; avoids committing keys)
+USER root
+RUN mkdir -p /etc/ssl/private \
+  && openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
+    -subj "/CN=localhost" \
+    -keyout /etc/ssl/private/roon-web-stack-local.key \
+    -out /etc/ssl/certs/roon-web-stack-local.crt
 
 # Set environment variables for SSL
-ENV SSL_CERT=/etc/ssl/certs/localhost+4.pem
-ENV SSL_KEY=/etc/ssl/private/localhost+4-key.pem
+ENV SSL_CERT=/etc/ssl/certs/roon-web-stack-local.crt
+ENV SSL_KEY=/etc/ssl/private/roon-web-stack-local.key
 ENV HTTPS=true
 
 # Expose HTTPS port
