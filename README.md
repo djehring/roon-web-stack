@@ -86,6 +86,50 @@ You should be welcome by the application.
 On first launch, you'll be asked to choose a `zone` to display.  
 Choose one, and voilà:
 
+#### HTTPS (required for microphone access)
+
+Browsers only allow microphone access from a **secure context** (HTTPS or
+`localhost`). This stack exposes HTTPS on port `3443`.
+
+- **LAN access**: set `CERT_HOSTS` to the IP/host you use to reach the web app
+  (for example `192.168.0.13`) so the generated self-signed certificate matches
+  the hostname.
+- **Open the app**: `https://{host}:3443`
+- **Trust the certificate**: because it's self-signed, your browser/OS must
+  accept it (once trusted, microphone permissions work normally).
+
+If you want a fully trusted certificate (no warnings), provide your own
+certificate/key and set `SSL_CERT` and `SSL_KEY` to their paths inside the
+container.
+
+##### Using mkcert (recommended for LAN)
+
+If you access the UI via a LAN DNS name (for example
+`roon-web-stack.bartlam.net`), the TLS certificate must include that hostname in
+its **SANs**.
+
+- Generate a cert (example):
+
+```bash
+mkcert -install
+mkcert \
+  -cert-file certs/roon-web-stack.pem \
+  -key-file certs/roon-web-stack-key.pem \
+  roon-web-stack.bartlam.net localhost 127.0.0.1 ::1
+```
+
+- Configure compose env (paths are **inside the container**):
+  - `SSL_CERT=/usr/src/app/config/certs/roon-web-stack.pem`
+  - `SSL_KEY=/usr/src/app/config/certs/roon-web-stack-key.pem`
+
+The `docker-compose.yml` mounts `./certs` into `/usr/src/app/config/certs`.
+
+#### OpenAI (required for AI Music Search)
+
+AI Music Search and voice transcription require `OPENAI_API_KEY` to be set for
+the backend container. If it isn't set, the API returns `503` with a clear
+error and the UI will show an error message.
+
 <img style="max-width: 800px;" alt="Selecting a zone at first app launch" src="./doc/images/selecting-zone-at-first-launch.gif">
 
 After this first boot, the app will display the last displayed `zone`.

@@ -5,9 +5,11 @@ const set_status = jest.fn();
 const start_discovery = jest.fn();
 const save_config = jest.fn();
 const load_config = jest.fn();
+const ws_connect = jest.fn();
 const api = () => ({
   save_config,
   load_config,
+  ws_connect,
 });
 const settings = jest.fn();
 export const extensionMock = {

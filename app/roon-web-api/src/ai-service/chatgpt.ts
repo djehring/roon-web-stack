@@ -9,10 +9,29 @@ const CACHE_DIR = path.join(process.cwd(), "cache", "track-stories");
 
 let openai: OpenAI | null = null;
 
+class MissingOpenAIKeyError extends Error {
+  public constructor() {
+    super("OPENAI_API_KEY is missing or empty");
+    this.name = "MissingOpenAIKeyError";
+  }
+}
+
+function assertOpenAIKey(): string {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key || key.trim() === "") {
+    throw new MissingOpenAIKeyError();
+  }
+  return key;
+}
+
+export function isMissingOpenAIKeyError(err: unknown): err is MissingOpenAIKeyError {
+  return err instanceof MissingOpenAIKeyError;
+}
+
 function getOpenAIInstance(): OpenAI {
   if (!openai) {
     openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY, // Ensure this is set in your environment
+      apiKey: assertOpenAIKey(),
     });
   }
   return openai;
@@ -507,8 +526,8 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 
     return tracks;
   } catch (error) {
-    logger.error("Error fetching track suggestions:", error);
-    return [];
+    logger.error(error, "Error fetching track suggestions");
+    throw error;
   }
 }
 

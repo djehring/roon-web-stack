@@ -26,8 +26,10 @@ import {
 
 describe("roon-extension.ts test suite", () => {
   let roon: Roon;
+  const originalEnv = process.env;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
     hostInfoMock.host = "host";
     hostInfoMock.hostname = "hostname";
     hostInfoMock.port = 42;
@@ -44,6 +46,7 @@ describe("roon-extension.ts test suite", () => {
   });
 
   afterEach(() => {
+    process.env = originalEnv;
     jest.clearAllMocks();
     jest.resetAllMocks();
     jest.resetModules();
@@ -285,6 +288,46 @@ describe("roon-extension.ts test suite", () => {
     listener(server);
     expect(loggerMock.warn).toHaveBeenCalledWith("lost roon server: display_name (vdisplay_version - core_id)");
     expect(loggerMock.info).toHaveBeenCalledWith("waiting for adoption...");
+  });
+
+  it("roon#startExtension should connect via websocket when ROON_CORE_HOST is set and schedule reconnect on close", () => {
+    process.env.ROON_CORE_HOST = "1.2.3.4";
+    process.env.ROON_CORE_PORT = "9330";
+
+    jest.useFakeTimers();
+
+    jest.resetModules();
+    jest.isolateModules((): void => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      roon = require("./roon-extension").roon as Roon;
+    });
+
+    const wsConnectMock = (extensionMock.api() as unknown as { ws_connect: jest.Mock }).ws_connect;
+    wsConnectMock.mockClear();
+
+    roon.startExtension();
+
+    expect(wsConnectMock).toHaveBeenCalledTimes(1);
+    expect(extensionMock.set_status).toHaveBeenCalledWith("connecting...");
+
+    const wsConnectArgs = wsConnectMock.mock.calls[0][0] as {
+      host: string;
+      port: number;
+      onclose?: () => void;
+    };
+    expect(wsConnectArgs.host).toEqual("1.2.3.4");
+    expect(wsConnectArgs.port).toEqual(9330);
+    expect(wsConnectArgs.onclose).toBeInstanceOf(Function);
+
+    wsConnectArgs.onclose?.();
+
+    expect(extensionMock.set_status).toHaveBeenLastCalledWith("connecting...");
+
+    jest.runOnlyPendingTimers();
+
+    expect(wsConnectMock).toHaveBeenCalledTimes(2);
+
+    jest.useRealTimers();
   });
 
   it("roon#getImage should return the same Promise as the one returned by RoonApiImage wrapped in RoonExtension", async () => {

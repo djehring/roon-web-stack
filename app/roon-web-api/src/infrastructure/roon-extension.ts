@@ -27,6 +27,9 @@ export const extension_version = process.env.npm_package_version ?? "0.0.0";
 const ROON_CORE_HOST = process.env.ROON_CORE_HOST;
 const ROON_CORE_PORT = parseInt(process.env.ROON_CORE_PORT ?? "9330", 10);
 
+const MIN_WS_RECONNECT_DELAY_MS = 1_000;
+const MAX_WS_RECONNECT_DELAY_MS = 60_000;
+
 const extension: RoonExtension<ExtensionSettings> = new Extension({
   description: {
     extension_id: "roon-web-stack",
@@ -45,11 +48,82 @@ const extension: RoonExtension<ExtensionSettings> = new Extension({
   log_level: "none",
 });
 
+let wsReconnectTimer: NodeJS.Timeout | undefined;
+let wsReconnectAttempt = 0;
+
+const clearWsReconnectTimer = (): void => {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = undefined;
+  }
+};
+
+const computeReconnectDelayMs = (attempt: number): number => {
+  const backoff = MIN_WS_RECONNECT_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1));
+  const capped = Math.min(backoff, MAX_WS_RECONNECT_DELAY_MS);
+  const jitter = Math.floor(Math.random() * Math.min(1_000, capped / 4));
+  return Math.min(capped + jitter, MAX_WS_RECONNECT_DELAY_MS);
+};
+
+const connectCoreWebsocket = (reason: string): void => {
+  if (!ROON_CORE_HOST) {
+    return;
+  }
+
+  const connectMsg = `connecting to core websocket (${reason}) at ${ROON_CORE_HOST}:${ROON_CORE_PORT}`;
+  logger.info(connectMsg);
+
+  extension.api().ws_connect({
+    host: ROON_CORE_HOST,
+    port: ROON_CORE_PORT,
+    onclose: () => {
+      logger.warn("core websocket connection closed");
+      scheduleReconnect("close");
+    },
+    onerror: (moo: unknown) => {
+      logger.warn("core websocket connection error");
+      const typedMoo = moo as { transport?: { close?: () => void } };
+      if (typedMoo.transport && typeof typedMoo.transport.close === "function") {
+        try {
+          typedMoo.transport.close();
+          return;
+        } catch (err: unknown) {
+          logger.warn(err, "failed to close websocket transport after error");
+        }
+      }
+      scheduleReconnect("error");
+    },
+  });
+};
+
+const scheduleReconnect = (trigger: string): void => {
+  if (!ROON_CORE_HOST) {
+    return;
+  }
+
+  if (wsReconnectTimer) {
+    return;
+  }
+
+  wsReconnectAttempt += 1;
+  const delayMs = computeReconnectDelayMs(wsReconnectAttempt);
+  logger.info(
+    `scheduling core websocket reconnect (trigger=${trigger}, attempt=${wsReconnectAttempt}, delayMs=${delayMs})`
+  );
+  extension.set_status("connecting...");
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = undefined;
+    connectCoreWebsocket("reconnect");
+  }, delayMs);
+};
+
 const onServerPaired = (listener: ServerListener): void => {
   extension.on("core_paired", listener);
 };
 
 const onServerPairedDefaultListener: ServerListener = (server: RoonServer) => {
+  wsReconnectAttempt = 0;
+  clearWsReconnectTimer();
   extension.set_status(`paired, exposed at http://${hostInfo.ipV4}:${hostInfo.port}`);
   logger.info(
     `extension version: ${extension_version}, paired roon server: ${server.display_name} (v${server.display_version} - ${server.core_id})`
@@ -60,6 +134,9 @@ const onServerPairedDefaultListener: ServerListener = (server: RoonServer) => {
 const onServerLostDefaultListener: ServerListener = (server: RoonServer) => {
   logger.warn(`lost roon server: ${server.display_name} (v${server.display_version} - ${server.core_id})`);
   logger.info(`waiting for adoption...`);
+  if (ROON_CORE_HOST) {
+    scheduleReconnect("core_unpaired");
+  }
 };
 
 const onServerLost = (listener: ServerListener): void => {
@@ -99,13 +176,7 @@ const startExtension = (): void => {
     extension.start_discovery();
     if (ROON_CORE_HOST) {
       extension.set_status("connecting...");
-      extension.api().ws_connect({
-        host: ROON_CORE_HOST,
-        port: ROON_CORE_PORT,
-        onclose: () => {
-          logger.warn("core websocket connection closed");
-        },
-      });
+      connectCoreWebsocket("startup");
     } else {
       extension.set_status("starting...");
     }

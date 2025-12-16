@@ -12,7 +12,12 @@ import {
   RoonImageScale,
 } from "@model";
 import { clientManager } from "@service";
-import { fetchTrackStory, fetchTrackSuggestions, transcribeAudio } from "../ai-service/chatgpt";
+import {
+  fetchTrackStory,
+  fetchTrackSuggestions,
+  isMissingOpenAIKeyError,
+  transcribeAudio,
+} from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
 import {
   analyzeUnmatchedTracks,
@@ -68,8 +73,16 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     if (client) {
       logger.debug({ client }, "Received AI search request");
       const query = req.body;
-      const tracks = await fetchTrackSuggestions(query);
-      return reply.status(200).send(tracks);
+      try {
+        const tracks = await fetchTrackSuggestions(query);
+        return await reply.status(200).send(tracks);
+      } catch (error: unknown) {
+        if (isMissingOpenAIKeyError(error)) {
+          return await reply.status(503).send({ error: error.message });
+        }
+        logger.error(error, "Error fetching track suggestions.");
+        return await reply.status(500).send({ error: "Error fetching track suggestions." });
+      }
     } else {
       return badRequestReply;
     }
@@ -240,6 +253,9 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
         // eslint-disable-next-line @typescript-eslint/return-await
         return reply.status(200).send({ text });
       } catch (error) {
+        if (isMissingOpenAIKeyError(error)) {
+          return reply.status(503).send({ error: error.message });
+        }
         logger.error(error, "Error processing audio file");
         return reply.status(500).send({ error: "Error processing audio file" });
       }

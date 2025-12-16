@@ -11,11 +11,22 @@ services:
       - "4443:3443"
     volumes:
       - roon-web-stack-config:/usr/src/app/config
+      # Optional: mount local certificates (e.g. mkcert) into the container
+      - ./certs:/usr/src/app/config/certs:ro
     environment:
       HOST: "0.0.0.0"
       PORT: "3000"
       HTTP_PORT: "3000"
       HTTPS_PORT: "3443"
+      # Optional: provide a real certificate/key (recommended).
+      # These paths are inside the container. See README for mkcert setup.
+      SSL_CERT: "${SSL_CERT:-/usr/src/app/config/tls/roon-web-stack.crt}"
+      SSL_KEY: "${SSL_KEY:-/usr/src/app/config/tls/roon-web-stack.key}"
+      # TLS certificate SANs for HTTPS (required for browser mic access on LAN IPs)
+      # Example: CERT_HOSTS=192.168.0.13,roon-web.local
+      CERT_HOSTS: "${CERT_HOSTS:-${NAS_HOST}}"
+      # OpenAI (required for AI Music Search / transcription)
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
       # Recommended for Docker Desktop on macOS (avoids UDP discovery issues)
       ROON_CORE_HOST: "${ROON_CORE_HOST}"
       ROON_CORE_PORT: "${ROON_CORE_PORT:-9330}"

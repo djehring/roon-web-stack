@@ -52,6 +52,14 @@ export interface WSConnectOptions {
   host: string;
   port: number;
   onclose?: () => void;
+  /**
+   * Called when the underlying websocket errors.
+   *
+   * @remarks
+   * `node-roon-api` passes an internal transport/session object, not the raw
+   * Error instance.
+   */
+  onerror?: (moo: unknown) => void;
 }
 
 export type RoonSubscriptionResponse = "Subscribed" | "Changed" | "Unsubscribed";

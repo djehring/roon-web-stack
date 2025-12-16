@@ -109,8 +109,9 @@ export class RoonAISearchDialogComponent implements AfterViewInit {
         this.searchResults = result.items;
         this.loading = false;
       },
-      error: () => {
+      error: (error: unknown) => {
         this.loading = false;
+        this.messageService.showError("AI search failed", error instanceof Error ? error : new Error(String(error)));
       },
     });
   }
