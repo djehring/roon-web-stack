@@ -1,0 +1,100 @@
+<h2 mat-dialog-title class="gramophone-dialog-title">
+  <mat-icon>library_music</mat-icon>
+  <span>Play from Gramophone</span>
+</h2>
+
+<mat-dialog-content>
+  <div class="search-container">
+    <div class="source-info" *ngIf="sourceTitle">
+      <div class="source-title">{{ sourceTitle }}</div>
+      <a class="source-url" [href]="sourceUrl" target="_blank" rel="noopener">
+        {{ sourceUrl }}
+      </a>
+    </div>
+
+    <div class="search-input-container">
+      <mat-form-field class="search-field">
+        <mat-label>Search query</mat-label>
+        <input
+          matInput
+          type="text"
+          inputmode="text"
+          [(ngModel)]="searchQuery"
+          (keyup.enter)="performSearch()"
+          #searchInput
+        />
+        <button
+          *ngIf="searchQuery"
+          matSuffix
+          mat-icon-button
+          aria-label="Clear"
+          (click)="clearSearch()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </mat-form-field>
+    </div>
+    <div class="search-button-wrapper">
+      <button
+        mat-raised-button
+        color="primary"
+        class="search-button"
+        (click)="performSearch()"
+        [disabled]="!searchQuery.trim()"
+      >
+        Search Library
+      </button>
+    </div>
+
+    <div class="results-container">
+      <div *ngIf="loading" class="loading-spinner">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+
+      <mat-list *ngIf="!loading && searchResults.length > 0">
+        <mat-list-item
+          *ngFor="let album of searchResults"
+          class="album-item"
+        >
+          <div class="album-content">
+            <div class="album-cover">
+              <img
+                *ngIf="getAlbumImageUrl(album)"
+                [src]="getAlbumImageUrl(album)"
+                alt="Album cover"
+              />
+              <mat-icon *ngIf="!getAlbumImageUrl(album)">album</mat-icon>
+            </div>
+            <div class="album-info">
+              <span class="album-title">{{ album.title }}</span>
+              <span class="album-artist" *ngIf="album.subtitle">
+                {{ album.subtitle }}
+              </span>
+            </div>
+            <button
+              mat-raised-button
+              color="primary"
+              class="play-button"
+              (click)="playAlbum(album)"
+            >
+              <mat-icon>play_arrow</mat-icon>
+              Play
+            </button>
+          </div>
+        </mat-list-item>
+      </mat-list>
+
+      <div
+        *ngIf="!loading && searchResults.length === 0 && searchQuery.trim()"
+        class="no-results-container"
+      >
+        <mat-icon>search_off</mat-icon>
+        <p>No albums found in your library. Try a different search query.</p>
+      </div>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="closeDialog()">Cancel</button>
+</mat-dialog-actions>

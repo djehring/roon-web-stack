@@ -10,6 +10,7 @@ import { RoonState } from "@model";
 import { DisplayMode } from "@model/client";
 import { NgxSpatialNavigableRootDirective } from "@nihilux/ngx-spatial-navigable";
 import { DialogService } from "@services/dialog.service";
+import { GramophoneShareService } from "@services/gramophone-share.service";
 import { RoonService } from "@services/roon.service";
 import { SettingsService } from "@services/settings.service";
 
@@ -30,11 +31,14 @@ import { SettingsService } from "@services/settings.service";
 })
 export class NrRootComponent {
   private readonly _dialogService: DialogService;
+  private readonly _gramophoneShareService: GramophoneShareService;
+  private _hasCheckedGramophoneHash = false;
   readonly $clientState: Signal<string>;
   readonly $isWithFullScreen: Signal<boolean>;
 
   constructor() {
     this._dialogService = inject(DialogService);
+    this._gramophoneShareService = inject(GramophoneShareService);
     const roonService = inject(RoonService);
     const settingsService = inject(SettingsService);
     const $displayedZoneId = settingsService.displayedZoneId();
@@ -64,6 +68,17 @@ export class NrRootComponent {
     effect(() => {
       this.$clientState();
       this._dialogService.close();
+    });
+    // Check for Gramophone share hash after app is synced
+    effect(() => {
+      const state = this.$clientState();
+      if (state === (RoonState.SYNC as string) && !this._hasCheckedGramophoneHash) {
+        this._hasCheckedGramophoneHash = true;
+        // Delay to ensure UI is ready
+        setTimeout(() => {
+          this._gramophoneShareService.checkHashAndOpenDialog();
+        }, 100);
+      }
     });
   }
 }

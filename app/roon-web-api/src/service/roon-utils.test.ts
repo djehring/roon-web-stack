@@ -4,7 +4,9 @@ import {
   browseIntoLibrary,
   getLibrarySearchItem,
   isInLibraryMenu,
+  playItemByKey,
   resetBrowseSession,
+  searchAlbumsInLibrary,
   searchForAlbumWithTitle,
 } from "./roon-utils";
 
@@ -735,6 +737,493 @@ describe("roon-utils", () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("Error loading album list"));
       expect(roon.browse).toHaveBeenCalledTimes(2);
       expect(roon.load).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("searchAlbumsInLibrary", () => {
+    const mockClientId = "test-client-id";
+    const mockZoneId = "test-zone-id";
+    const mockQuery = "beethoven symphony";
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("should return formatted album items on successful search", async () => {
+      // Mock reset browse session
+      const mockResetResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Root", level: 0, count: 1 },
+      };
+
+      // Mock browse into library
+      const mockLibraryResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      // Mock library menu load (with Search item)
+      const mockLibraryMenu: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Search", item_key: "search-key" },
+          { title: "Artists", item_key: "artists-key" },
+          { title: "Albums", item_key: "albums-key" },
+          { title: "Tracks", item_key: "tracks-key" },
+        ],
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      // Mock search response
+      const mockSearchResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Search Results", level: 2, count: 2 },
+      };
+
+      // Mock search results load
+      const mockSearchResults: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Albums", item_key: "albums-section-key", hint: "list" },
+          { title: "Artists", item_key: "artists-section-key", hint: "list" },
+        ],
+        list: { title: "Search Results", level: 2, count: 2 },
+      };
+
+      // Mock albums browse response
+      const mockAlbumsResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Albums", level: 3, count: 2 },
+      };
+
+      // Mock albums list load
+      const mockAlbumsList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          {
+            title: "Symphony No. 5",
+            subtitle: "Beethoven",
+            item_key: "album-1-key",
+            image_key: "image-1-key",
+          },
+          {
+            title: "Symphony No. 9",
+            subtitle: "Beethoven",
+            item_key: "album-2-key",
+            image_key: "image-2-key",
+          },
+        ],
+        list: { title: "Albums", level: 3, count: 2 },
+      };
+
+      (roon.browse as jest.Mock)
+        .mockResolvedValueOnce(mockResetResponse)
+        .mockResolvedValueOnce(mockLibraryResponse)
+        .mockResolvedValueOnce(mockSearchResponse)
+        .mockResolvedValueOnce(mockAlbumsResponse);
+
+      (roon.load as jest.Mock)
+        .mockResolvedValueOnce(mockLibraryMenu)
+        .mockResolvedValueOnce(mockSearchResults)
+        .mockResolvedValueOnce(mockAlbumsList);
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        title: "Symphony No. 5",
+        subtitle: "Beethoven",
+        item_key: "album-1-key",
+        image_key: "image-1-key",
+      });
+      expect(result[1]).toEqual({
+        title: "Symphony No. 9",
+        subtitle: "Beethoven",
+        item_key: "album-2-key",
+        image_key: "image-2-key",
+      });
+    });
+
+    it("should filter out items without item_key", async () => {
+      const mockResetResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Root", level: 0, count: 1 },
+      };
+
+      const mockLibraryResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      const mockLibraryMenu: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Search", item_key: "search-key" },
+          { title: "Artists", item_key: "artists-key" },
+          { title: "Albums", item_key: "albums-key" },
+          { title: "Tracks", item_key: "tracks-key" },
+        ],
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      const mockSearchResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Search Results", level: 2, count: 1 },
+      };
+
+      const mockSearchResults: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [{ title: "Albums", item_key: "albums-section-key", hint: "list" }],
+        list: { title: "Search Results", level: 2, count: 1 },
+      };
+
+      const mockAlbumsResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Albums", level: 3, count: 2 },
+      };
+
+      // One item without item_key
+      const mockAlbumsList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Album with key", subtitle: "Artist", item_key: "album-key" },
+          { title: "Album without key", subtitle: "Artist" }, // No item_key
+        ],
+        list: { title: "Albums", level: 3, count: 2 },
+      };
+
+      (roon.browse as jest.Mock)
+        .mockResolvedValueOnce(mockResetResponse)
+        .mockResolvedValueOnce(mockLibraryResponse)
+        .mockResolvedValueOnce(mockSearchResponse)
+        .mockResolvedValueOnce(mockAlbumsResponse);
+
+      (roon.load as jest.Mock)
+        .mockResolvedValueOnce(mockLibraryMenu)
+        .mockResolvedValueOnce(mockSearchResults)
+        .mockResolvedValueOnce(mockAlbumsList);
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].item_key).toBe("album-key");
+    });
+
+    it("should return empty array when browse into library fails", async () => {
+      const mockResetResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Root", level: 0, count: 1 },
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockResetResponse).mockResolvedValueOnce({ action: "list" }); // No list property
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toEqual([]);
+      expect(logger.debug).toHaveBeenCalledWith("Failed to browse into library");
+    });
+
+    it("should return empty array when search item not found", async () => {
+      const mockResetResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Root", level: 0, count: 1 },
+      };
+
+      const mockLibraryResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Library", level: 1, count: 2 },
+      };
+
+      // Library menu without Search item
+      const mockLibraryMenu: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Artists", item_key: "artists-key" },
+          { title: "Albums", item_key: "albums-key" },
+        ],
+        list: { title: "Library", level: 1, count: 2 },
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockResetResponse).mockResolvedValueOnce(mockLibraryResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockLibraryMenu);
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toEqual([]);
+      expect(logger.debug).toHaveBeenCalledWith("Failed to get library search item");
+    });
+
+    it("should return empty array when no albums found", async () => {
+      const mockResetResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Root", level: 0, count: 1 },
+      };
+
+      const mockLibraryResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      const mockLibraryMenu: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Search", item_key: "search-key" },
+          { title: "Artists", item_key: "artists-key" },
+          { title: "Albums", item_key: "albums-key" },
+          { title: "Tracks", item_key: "tracks-key" },
+        ],
+        list: { title: "Library", level: 1, count: 4 },
+      };
+
+      // Search returns no results
+      const mockSearchResponse: RoonApiBrowseResponse = {
+        action: "message",
+      };
+
+      (roon.browse as jest.Mock)
+        .mockResolvedValueOnce(mockResetResponse)
+        .mockResolvedValueOnce(mockLibraryResponse)
+        .mockResolvedValueOnce(mockSearchResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockLibraryMenu);
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array and log error on exception", async () => {
+      const error = new Error("Unexpected error");
+      (roon.browse as jest.Mock).mockRejectedValueOnce(error);
+
+      const result = await searchAlbumsInLibrary(mockClientId, mockZoneId, mockQuery);
+
+      expect(result).toEqual([]);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("Error searching albums in library"));
+    });
+  });
+
+  describe("playItemByKey", () => {
+    const mockClientId = "test-client-id";
+    const mockZoneId = "test-zone-id";
+    const mockItemKey = "album-item-key";
+    const mockActionTitle = "Play Now";
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("should successfully execute Play Now action", async () => {
+      // Mock browse to item (get action list)
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 3 },
+      };
+
+      // Mock action list load
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Play Now", item_key: "play-now-key", hint: "action" },
+          { title: "Queue", item_key: "queue-key", hint: "action" },
+          { title: "Start Radio", item_key: "radio-key", hint: "action" },
+        ],
+        list: { title: "Album Actions", level: 1, count: 3 },
+      };
+
+      // Mock action execution
+      const mockActionResponse: RoonApiBrowseResponse = {
+        action: "none",
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse).mockResolvedValueOnce(mockActionResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).resolves.toBeUndefined();
+
+      expect(roon.browse).toHaveBeenCalledTimes(2);
+      expect(roon.browse).toHaveBeenNthCalledWith(1, {
+        hierarchy: "browse",
+        item_key: mockItemKey,
+        multi_session_key: mockClientId,
+        zone_or_output_id: mockZoneId,
+      });
+      expect(roon.browse).toHaveBeenNthCalledWith(2, {
+        hierarchy: "browse",
+        item_key: "play-now-key",
+        multi_session_key: mockClientId,
+        zone_or_output_id: mockZoneId,
+      });
+
+      expect(roon.load).toHaveBeenCalledWith({
+        hierarchy: "browse",
+        multi_session_key: mockClientId,
+        level: 1,
+      });
+
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining(`Successfully executed "${mockActionTitle}"`));
+    });
+
+    it("should handle action with follow-up list", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 1 },
+      };
+
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [{ title: "Play Now", item_key: "play-now-key", hint: "action" }],
+        list: { title: "Album Actions", level: 1, count: 1 },
+      };
+
+      // Action returns a list that needs to be loaded
+      const mockActionResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Confirmation", level: 2, count: 1 },
+      };
+
+      const mockFollowUpList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [{ title: "Done", hint: "action" }],
+        list: { title: "Confirmation", level: 2, count: 1 },
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse).mockResolvedValueOnce(mockActionResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList).mockResolvedValueOnce(mockFollowUpList);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).resolves.toBeUndefined();
+
+      expect(roon.load).toHaveBeenCalledTimes(2);
+      expect(roon.load).toHaveBeenNthCalledWith(2, {
+        hierarchy: "browse",
+        multi_session_key: mockClientId,
+        level: 2,
+      });
+    });
+
+    it("should throw error when browse returns no action list", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "message",
+        // No list property
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).rejects.toThrow(
+        `No action list returned for item: ${mockItemKey}`
+      );
+    });
+
+    it("should throw error when requested action is not found", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      // Action list without "Play Now"
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Queue", item_key: "queue-key", hint: "action" },
+          { title: "Start Radio", item_key: "radio-key", hint: "action" },
+        ],
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse);
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).rejects.toThrow(
+        `Could not find "${mockActionTitle}" action for item: ${mockItemKey}`
+      );
+    });
+
+    it("should not match action without hint=action", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 1 },
+      };
+
+      // "Play Now" exists but without hint=action
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [{ title: "Play Now", item_key: "play-now-key", hint: "list" }],
+        list: { title: "Album Actions", level: 1, count: 1 },
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse);
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).rejects.toThrow(
+        `Could not find "${mockActionTitle}" action`
+      );
+    });
+
+    it("should execute Queue action when specified", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Play Now", item_key: "play-now-key", hint: "action" },
+          { title: "Queue", item_key: "queue-key", hint: "action" },
+        ],
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      const mockActionResponse: RoonApiBrowseResponse = {
+        action: "none",
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse).mockResolvedValueOnce(mockActionResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList);
+
+      await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, "Queue")).resolves.toBeUndefined();
+
+      expect(roon.browse).toHaveBeenNthCalledWith(2, {
+        hierarchy: "browse",
+        item_key: "queue-key",
+        multi_session_key: mockClientId,
+        zone_or_output_id: mockZoneId,
+      });
+    });
+
+    it("should log available actions for debugging", async () => {
+      const mockBrowseResponse: RoonApiBrowseResponse = {
+        action: "list",
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      const mockActionList: RoonApiBrowseLoadResponse = {
+        offset: 0,
+        items: [
+          { title: "Play Now", item_key: "play-now-key", hint: "action" },
+          { title: "Queue", item_key: "queue-key", hint: "action" },
+        ],
+        list: { title: "Album Actions", level: 1, count: 2 },
+      };
+
+      const mockActionResponse: RoonApiBrowseResponse = {
+        action: "none",
+      };
+
+      (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse).mockResolvedValueOnce(mockActionResponse);
+
+      (roon.load as jest.Mock).mockResolvedValueOnce(mockActionList);
+
+      await playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle);
+
+      expect(logger.debug).toHaveBeenCalledWith("Available actions for item:", [
+        { title: "Play Now", hint: "action", item_key: "play-now-key" },
+        { title: "Queue", hint: "action", item_key: "queue-key" },
+      ]);
     });
   });
 });

@@ -22,6 +22,7 @@ import {
   RoonStateListener,
   RoonWebClient,
   RoonWebClientFactory,
+  SearchAlbumsResponse,
   SharedConfig,
   SharedConfigListener,
   SuggestedTrack,
@@ -481,6 +482,52 @@ class InternalRoonWebClient implements RoonWebClient {
       }
     }
     return index;
+  };
+
+  searchAlbums: (zoneId: string, query: string) => Promise<SearchAlbumsResponse> = async (
+    zoneId: string,
+    query: string
+  ): Promise<SearchAlbumsResponse> => {
+    const clientPath = this.ensureStared();
+    const searchUrl = new URL(`${clientPath}/library/search-albums`, this._apiHost);
+    const req = new Request(searchUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ zoneId, query }),
+    });
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      return (await response.json()) as SearchAlbumsResponse;
+    }
+    throw new Error("Unable to search albums");
+  };
+
+  playItem: (zoneId: string, itemKey: string, actionTitle: string) => Promise<void> = async (
+    zoneId: string,
+    itemKey: string,
+    actionTitle: string
+  ): Promise<void> => {
+    const clientPath = this.ensureStared();
+    const playUrl = new URL(`${clientPath}/library/play-item`, this._apiHost);
+    const req = new Request(playUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ zoneId, item_key: itemKey, actionTitle }),
+    });
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 204) {
+      return;
+    }
+    const errorBody = (await response.json().catch(() => ({ error: "Unknown error" }))) as {
+      error?: string;
+    };
+    throw new Error(errorBody.error || "Unable to play item");
   };
 
   private ensureStared: () => string = () => {

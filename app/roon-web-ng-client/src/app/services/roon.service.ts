@@ -20,6 +20,7 @@ import {
   RoonApiBrowseResponse,
   RoonPath,
   RoonState,
+  SearchAlbumsResponse,
   SharedConfig,
   SuggestedTrack,
   TranscriptionResponse,
@@ -40,12 +41,16 @@ import {
   LoadWorkerApiRequest,
   NavigateWorkerApiRequest,
   OutputCallback,
+  PlayItemApiResult,
+  PlayItemWorkerApiRequest,
   PlayTracksApiResult,
   PlayTracksWorkerApiRequest,
   PreviousWorkerApiRequest,
   RawApiResult,
   RawWorkerApiRequest,
   RawWorkerEvent,
+  SearchAlbumsApiResult,
+  SearchAlbumsWorkerApiRequest,
   TrackStoryApiResult,
   TrackStoryWorkerApiRequest,
   TranscriptionApiResult,
@@ -92,6 +97,8 @@ export class RoonService {
   >;
   private readonly _apiTrackStoryCallbacks: Map<number, ApiResultCallback<AITrackStoryResponse>>;
   private readonly _apiTranscriptionCallbacks: Map<number, ApiResultCallback<TranscriptionResponse>> = new Map();
+  private readonly _apiSearchAlbumsCallbacks: Map<number, ApiResultCallback<SearchAlbumsResponse>> = new Map();
+  private readonly _apiPlayItemCallbacks: Map<number, ApiResultCallback<undefined>> = new Map();
   private _workerApiRequestId: number;
   private _isStarted: boolean;
   private _outputCallback?: OutputCallback;
@@ -499,6 +506,60 @@ export class RoonService {
     });
   };
 
+  searchAlbums: (zoneId: string, query: string) => Promise<SearchAlbumsResponse> = (zoneId, query) => {
+    const worker = this.ensureStarted();
+    const id = this.nextWorkerApiRequestId();
+    const apiRequest: SearchAlbumsWorkerApiRequest = {
+      id,
+      type: "search-albums",
+      data: { zoneId, query },
+    };
+    return new Promise((resolve, reject) => {
+      const apiResultCallback: ApiResultCallback<SearchAlbumsResponse> = {
+        next: (response) => {
+          resolve(response);
+        },
+        error: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      };
+      this._apiSearchAlbumsCallbacks.set(id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  };
+
+  playItem: (zoneId: string, itemKey: string, actionTitle: string) => Promise<void> = (
+    zoneId,
+    itemKey,
+    actionTitle
+  ) => {
+    const worker = this.ensureStarted();
+    const id = this.nextWorkerApiRequestId();
+    const apiRequest: PlayItemWorkerApiRequest = {
+      id,
+      type: "play-item",
+      data: { zoneId, itemKey, actionTitle },
+    };
+    return new Promise((resolve, reject) => {
+      const apiResultCallback: ApiResultCallback<undefined> = {
+        next: () => {
+          resolve();
+        },
+        error: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      };
+      this._apiPlayItemCallbacks.set(id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  };
+
   private reconnect: () => void = () => {
     if (this._worker) {
       const message: WorkerClientActionMessage = {
@@ -661,6 +722,12 @@ export class RoonService {
       case "transcribe":
         this.onTranscriptionApiResult(apiResultEvent);
         break;
+      case "search-albums":
+        this.onSearchAlbumsApiResult(apiResultEvent);
+        break;
+      case "play-item":
+        this.onPlayItemApiResult(apiResultEvent);
+        break;
     }
   }
 
@@ -765,6 +832,32 @@ export class RoonService {
         callback.error(apiResult.error || new Error("No data received"));
       }
       this._apiTranscriptionCallbacks.delete(apiResult.id);
+    }
+  }
+
+  private onSearchAlbumsApiResult(apiResult: SearchAlbumsApiResult) {
+    const callback = this._apiSearchAlbumsCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.data) {
+        callback.next(apiResult.data);
+      } else if (callback.error) {
+        callback.error(apiResult.error || new Error("No data received"));
+      }
+      this._apiSearchAlbumsCallbacks.delete(apiResult.id);
+    }
+  }
+
+  private onPlayItemApiResult(apiResult: PlayItemApiResult) {
+    const callback = this._apiPlayItemCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.error) {
+        if (callback.error) {
+          callback.error(apiResult.error);
+        }
+      } else {
+        callback.next(undefined);
+      }
+      this._apiPlayItemCallbacks.delete(apiResult.id);
     }
   }
 

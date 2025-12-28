@@ -11,10 +11,12 @@ import {
   CommandStateWorkerEvent,
   FoundItemIndexApiResult,
   LoadApiResult,
+  PlayItemApiResult,
   PlayTracksApiResult,
   QueueStateWorkerEvent,
   RawApiResult,
   RawWorkerApiRequest,
+  SearchAlbumsApiResult,
   TrackStoryApiResult,
   TranscriptionApiResult,
   WorkerActionMessage,
@@ -421,6 +423,46 @@ const onApiRequest = (apiRequest: RawWorkerApiRequest): void => {
             type: "transcribe",
             id,
             error: error instanceof Error ? error : String(error),
+          };
+          postApiResult(message);
+        });
+      break;
+    case "search-albums":
+      void _roonClient
+        .searchAlbums(apiRequest.data.zoneId, apiRequest.data.query)
+        .then((data) => {
+          const message: SearchAlbumsApiResult = {
+            type: "search-albums",
+            id,
+            data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          const message: SearchAlbumsApiResult = {
+            type: "search-albums",
+            id,
+            error,
+          };
+          postApiResult(message);
+        });
+      break;
+    case "play-item":
+      void _roonClient
+        .playItem(apiRequest.data.zoneId, apiRequest.data.itemKey, apiRequest.data.actionTitle)
+        .then(() => {
+          const message: PlayItemApiResult = {
+            type: "play-item",
+            id,
+            data: undefined,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          const message: PlayItemApiResult = {
+            type: "play-item",
+            id,
+            error,
           };
           postApiResult(message);
         });

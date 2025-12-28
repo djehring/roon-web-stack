@@ -14,6 +14,7 @@ import {
   RoonApiBrowseLoadResponse,
   RoonApiBrowseResponse,
   RoonPath,
+  SearchAlbumsResponse,
   SharedConfig,
   SuggestedTrack,
   TranscriptionResponse,
@@ -115,6 +116,15 @@ export interface TranscriptionWorkerApiRequest extends WorkerApiRequest<{ audio:
   type: "transcribe";
 }
 
+export interface SearchAlbumsWorkerApiRequest extends WorkerApiRequest<{ zoneId: string; query: string }> {
+  type: "search-albums";
+}
+
+export interface PlayItemWorkerApiRequest
+  extends WorkerApiRequest<{ zoneId: string; itemKey: string; actionTitle: string }> {
+  type: "play-item";
+}
+
 export type RawWorkerApiRequest =
   | BrowseWorkerApiRequest
   | LoadWorkerApiRequest
@@ -127,7 +137,9 @@ export type RawWorkerApiRequest =
   | AISearchWorkerApiRequest
   | PlayTracksWorkerApiRequest
   | TrackStoryWorkerApiRequest
-  | TranscriptionWorkerApiRequest;
+  | TranscriptionWorkerApiRequest
+  | SearchAlbumsWorkerApiRequest
+  | PlayItemWorkerApiRequest;
 
 export interface WorkerApiRequestMessage extends WorkerMessage<RawWorkerApiRequest> {
   event: "worker-api";
@@ -214,6 +226,14 @@ export interface TranscriptionApiResult extends ApiResult<TranscriptionResponse>
   type: "transcribe";
 }
 
+export interface SearchAlbumsApiResult extends ApiResult<SearchAlbumsResponse> {
+  type: "search-albums";
+}
+
+export interface PlayItemApiResult extends ApiResult<void> {
+  type: "play-item";
+}
+
 export type RawApiResult =
   | BrowseApiResult
   | LoadApiResult
@@ -223,7 +243,9 @@ export type RawApiResult =
   | AISearchApiResult
   | PlayTracksApiResult
   | TrackStoryApiResult
-  | TranscriptionApiResult;
+  | TranscriptionApiResult
+  | SearchAlbumsApiResult
+  | PlayItemApiResult;
 
 export interface ApiResultWorkerEvent extends WorkerEvent<RawApiResult> {
   event: "apiResult";
@@ -233,11 +255,13 @@ export interface ApiResultCallback<
   U extends
     | string
     | number
+    | undefined
     | RoonApiBrowseResponse
     | RoonApiBrowseLoadResponse
     | AISearchResponse
     | AITrackStoryResponse
-    | TranscriptionResponse,
+    | TranscriptionResponse
+    | SearchAlbumsResponse,
 > {
   next: (u: U) => void;
   error?: (error: unknown) => void;

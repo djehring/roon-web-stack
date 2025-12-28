@@ -19,6 +19,7 @@ import {
   transcribeAudio,
 } from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
+import { playItemByKey, searchAlbumsInLibrary } from "../service/roon-utils";
 import {
   analyzeUnmatchedTracks,
   cleanupOldUnmatchedTracksData,
@@ -49,6 +50,17 @@ interface ImageQuery {
 
 interface TranscriptionRequest {
   audio: Buffer;
+}
+
+interface SearchAlbumsBody {
+  zoneId: string;
+  query: string;
+}
+
+interface PlayItemBody {
+  zoneId: string;
+  item_key: string;
+  actionTitle: string;
 }
 
 const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<void> => {
@@ -319,6 +331,52 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       }
     }
   );
+
+  // Library search-albums endpoint for Gramophone share feature
+  server.post<{ Params: ClientIdParam; Body: SearchAlbumsBody }>(
+    "/:client_id/library/search-albums",
+    async (req, reply) => {
+      const { client, badRequestReply } = getClient(req, reply);
+      if (!client) {
+        return badRequestReply;
+      }
+
+      const { zoneId, query } = req.body;
+      if (!zoneId || !query) {
+        return reply.status(400).send({ error: "zoneId and query are required" });
+      }
+
+      try {
+        const items = await searchAlbumsInLibrary(req.params.client_id, zoneId, query);
+        return await reply.status(200).send({ items });
+      } catch (error) {
+        logger.error(`Error searching albums: ${JSON.stringify(error)}`);
+        return await reply.status(500).send({ error: "Failed to search albums" });
+      }
+    }
+  );
+
+  // Library play-item endpoint for Gramophone share feature
+  server.post<{ Params: ClientIdParam; Body: PlayItemBody }>("/:client_id/library/play-item", async (req, reply) => {
+    const { client, badRequestReply } = getClient(req, reply);
+    if (!client) {
+      return badRequestReply;
+    }
+
+    const { zoneId, item_key, actionTitle } = req.body;
+    if (!zoneId || !item_key || !actionTitle) {
+      return reply.status(400).send({ error: "zoneId, item_key, and actionTitle are required" });
+    }
+
+    try {
+      await playItemByKey(req.params.client_id, zoneId, item_key, actionTitle);
+      return await reply.status(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error(`Error playing item: ${message}`);
+      return await reply.status(500).send({ error: message });
+    }
+  });
 };
 
 const getClient = (

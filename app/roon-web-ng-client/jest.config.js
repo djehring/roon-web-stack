@@ -23,6 +23,7 @@ module.exports = {
     "^@components/(.*)$": ["<rootDir>/src/app/components/$1"],
     "^@mock/(.*)$": ["<rootDir>/src/mock/$1"],
     "^@services/(.*)$": ["<rootDir>/src/app/services/$1"],
+    "^@model$": ["<rootDir>/../../packages/roon-web-model/src/index.d.ts"],
     "@model/client": ["<rootDir>/src/app/model/index.ts"],
     "@nihilux/ngx-spatial-navigable": ["<rootDir>/projects/nihilux/ngx-spatial-navigable/src/public-api.ts"],
   },

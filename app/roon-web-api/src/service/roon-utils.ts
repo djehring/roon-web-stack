@@ -1,5 +1,5 @@
 import { logger, roon } from "@infrastructure";
-import { Item, RoonApiBrowseLoadResponse, RoonApiBrowseResponse } from "@model";
+import { Item, LibrarySearchAlbumItem, RoonApiBrowseLoadResponse, RoonApiBrowseResponse } from "@model";
 
 /**
  * Resets the Roon browse session to its initial state
@@ -246,4 +246,198 @@ export async function searchForAlbumWithTitle(
     }))
   );
   return albumsList;
+}
+
+/**
+ * Searches for albums in the library and returns formatted results
+ * @param clientId - The client's session key
+ * @param zoneId - The zone ID
+ * @param query - The search query
+ * @returns Promise resolving to array of LibrarySearchAlbumItem
+ */
+export async function searchAlbumsInLibrary(
+  clientId: string,
+  zoneId: string,
+  query: string
+): Promise<LibrarySearchAlbumItem[]> {
+  try {
+    // Reset browse session first
+    await resetBrowseSession(clientId, "browse");
+
+    // Browse into Library
+    const libraryResponse = await browseIntoLibrary(clientId, zoneId);
+    if (!libraryResponse) {
+      logger.debug("Failed to browse into library");
+      return [];
+    }
+
+    // Get the Search item
+    const searchItem = await getLibrarySearchItem(clientId, zoneId, libraryResponse);
+    if (!searchItem) {
+      logger.debug("Failed to get library search item");
+      return [];
+    }
+
+    // Search for albums
+    const albumsList = await searchForAlbumWithTitle(clientId, searchItem.item_key, zoneId, query);
+
+    if (!albumsList) {
+      logger.debug("No albums found for query:", query);
+      return [];
+    }
+
+    // Map to LibrarySearchAlbumItem format
+    return albumsList.items
+      .filter((item): item is typeof item & { item_key: string } => Boolean(item.item_key))
+      .map((item) => ({
+        title: item.title,
+        subtitle: item.subtitle,
+        item_key: item.item_key,
+        image_key: item.image_key,
+      }));
+  } catch (error) {
+    logger.error(`Error searching albums in library: ${JSON.stringify(error)}`);
+    return [];
+  }
+}
+
+/**
+ * Plays an item by its item_key using the specified action
+ * For albums, this browses into the album, gets the first track, and plays it
+ * @param clientId - The client's session key
+ * @param zoneId - The zone ID
+ * @param itemKey - The item key to play (album or track)
+ * @param actionTitle - The action to execute (e.g., "Play Now", "Queue")
+ * @returns Promise resolving when action is complete
+ */
+export async function playItemByKey(
+  clientId: string,
+  zoneId: string,
+  itemKey: string,
+  actionTitle: string
+): Promise<void> {
+  // Browse to the item
+  const browseResponse = await roon.browse({
+    hierarchy: "browse",
+    item_key: itemKey,
+    multi_session_key: clientId,
+    zone_or_output_id: zoneId,
+  });
+
+  if (!browseResponse.list) {
+    throw new Error(`No list returned for item: ${itemKey}`);
+  }
+
+  // Load the list contents
+  let itemList = await roon.load({
+    hierarchy: "browse",
+    multi_session_key: clientId,
+    level: browseResponse.list.level,
+  });
+
+  logger.debug("Initial browse result:", {
+    hint: browseResponse.list.hint,
+    count: browseResponse.list.count,
+    items: itemList.items.map((item) => ({
+      title: item.title,
+      hint: item.hint,
+    })),
+  });
+
+  // If this is a track list (album contents), browse into the first track
+  if (browseResponse.list.hint !== "action_list" && itemList.items.length > 0) {
+    const firstTrack = itemList.items[0];
+    if (!firstTrack.item_key) {
+      throw new Error(`First track has no item_key`);
+    }
+
+    logger.debug("Browsing into first track:", { title: firstTrack.title });
+
+    const trackBrowse = await roon.browse({
+      hierarchy: "browse",
+      item_key: firstTrack.item_key,
+      multi_session_key: clientId,
+      zone_or_output_id: zoneId,
+    });
+
+    if (!trackBrowse.list) {
+      throw new Error(`No action list for track: ${firstTrack.title}`);
+    }
+
+    itemList = await roon.load({
+      hierarchy: "browse",
+      multi_session_key: clientId,
+      level: trackBrowse.list.level,
+    });
+  }
+
+  // Log available items
+  logger.debug(
+    "Available items:",
+    itemList.items.map((item) => ({
+      title: item.title,
+      hint: item.hint,
+    }))
+  );
+
+  // Look for "Play Album" action_list first (for albums from search)
+  const playAlbumItem = itemList.items.find((item) => {
+    return item.title === "Play Album" && item.hint === "action_list";
+  });
+
+  if (playAlbumItem && playAlbumItem.item_key) {
+    logger.debug("Found 'Play Album' action_list, browsing into it");
+
+    const playAlbumBrowse = await roon.browse({
+      hierarchy: "browse",
+      item_key: playAlbumItem.item_key,
+      multi_session_key: clientId,
+      zone_or_output_id: zoneId,
+    });
+
+    if (playAlbumBrowse.list) {
+      itemList = await roon.load({
+        hierarchy: "browse",
+        multi_session_key: clientId,
+        level: playAlbumBrowse.list.level,
+      });
+
+      logger.debug(
+        "Play Album actions:",
+        itemList.items.map((item) => ({ title: item.title, hint: item.hint }))
+      );
+    }
+  }
+
+  // Find the requested action
+  const action = itemList.items.find((item) => item.title === actionTitle && item.hint === "action");
+
+  if (!action) {
+    throw new Error(`Could not find "${actionTitle}" action for item: ${itemKey}`);
+  }
+
+  logger.debug("Executing action:", {
+    title: actionTitle,
+    item_key: action.item_key,
+    zone_id: zoneId,
+  });
+
+  // Execute the action
+  const actionResponse = await roon.browse({
+    hierarchy: "browse",
+    item_key: action.item_key,
+    multi_session_key: clientId,
+    zone_or_output_id: zoneId,
+  });
+
+  // Complete the action if needed
+  if (actionResponse.list) {
+    await roon.load({
+      hierarchy: "browse",
+      multi_session_key: clientId,
+      level: actionResponse.list.level,
+    });
+  }
+
+  logger.debug(`Successfully executed "${actionTitle}" for item: ${itemKey}`);
 }

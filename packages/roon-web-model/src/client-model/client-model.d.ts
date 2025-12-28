@@ -49,6 +49,8 @@ export interface RoonWebClient {
   load: (options: ClientRoonApiBrowseLoadOptions) => Promise<RoonApiBrowseLoadResponse>;
   loadPath: (zone_id: string, path: RoonPath) => Promise<RoonApiBrowseLoadResponse>;
   findItemIndex: (itemIndexSearch: ItemIndexSearch) => Promise<FoundItemIndexResponse>;
+  searchAlbums: (zoneId: string, query: string) => Promise<SearchAlbumsResponse>;
+  playItem: (zoneId: string, itemKey: string, actionTitle: string) => Promise<void>;
   version: () => string;
 }
 
@@ -100,4 +102,27 @@ export interface AITrackStoryResponse {
 
 export interface TranscriptionResponse {
   text: string;
+}
+
+// Library search types for Gramophone share feature
+export interface LibrarySearchAlbumItem {
+  title: string;
+  subtitle?: string;
+  item_key: string;
+  image_key?: string;
+}
+
+export interface SearchAlbumsRequest {
+  zoneId: string;
+  query: string;
+}
+
+export interface SearchAlbumsResponse {
+  items: LibrarySearchAlbumItem[];
+}
+
+export interface PlayItemRequest {
+  zoneId: string;
+  item_key: string;
+  actionTitle: string;
 }

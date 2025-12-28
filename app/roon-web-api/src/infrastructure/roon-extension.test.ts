@@ -298,7 +298,6 @@ describe("roon-extension.ts test suite", () => {
 
     jest.resetModules();
     jest.isolateModules((): void => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       roon = require("./roon-extension").roon as Roon;
     });
 
