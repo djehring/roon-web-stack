@@ -86,11 +86,13 @@ const connectCoreWebsocket = (reason: string): void => {
       if (typedMoo.transport && typeof typedMoo.transport.close === "function") {
         try {
           typedMoo.transport.close();
-          return;
         } catch (err: unknown) {
           logger.warn(err, "failed to close websocket transport after error");
         }
       }
+      // Always schedule a reconnect on error. In some failure modes, calling
+      // transport.close() does not reliably trigger the ws_connect onclose hook,
+      // which would otherwise schedule the reconnect.
       scheduleReconnect("error");
     },
   });
