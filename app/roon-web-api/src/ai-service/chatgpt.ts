@@ -422,7 +422,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 
     const openaiInstance = getOpenAIInstance();
     const response = await openaiInstance.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-5.2",
       messages: [
         {
           role: "system",
@@ -481,7 +481,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
                     }`,
         },
       ],
-      max_tokens: 300, // Adjust as needed for response length
+      max_completion_tokens: 4000, // Increased for GPT-5.2 reasoning tokens
       temperature: 0.3, // Lower temperature for more factual responses
       top_p: 1, // Default value for focused sampling
     });
@@ -534,24 +534,27 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
   const openaiInstance = getOpenAIInstance();
   const response = await openaiInstance.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5.2",
     messages: [
       {
         role: "system",
-        content: `Provide a detailed and structured story for the song "${track.track}" by ${track.artist}.
+        content: `You are a music historian and expert. Provide detailed and structured stories about songs.
                   Include the following sections with headings:
-                  - **Story Behind "${track.track}" by ${track.artist} on ${track.album}:** A brief introduction summarizing the significance and themes of the song.
+                  - **Story Behind the Song:** A brief introduction summarizing the significance and themes of the song.
                   - **The Narrative:** Describe the key elements of the song's lyrics, including inspiration and storyline. Break it into subsections, if applicable.
                   - **Themes:** Explain the universal or specific themes the song explores.
                   - **Recording Details:** Include album name, release date, studio location, producer, and key contributing musicians. Highlight their contributions.
                   - **Musical Style:** Provide details about the song's musical characteristics, genre influences, and instrumentation.
                   - **Reception and Legacy:** Summarize the song's critical reception, chart performance, awards, and cultural impact.
 
-                  Ensure the response is rich in detail, well-structured, and formatted for direct use in a UI.
-                  `,
+                  Ensure the response is rich in detail, well-structured, and formatted for direct use in a UI.`,
+      },
+      {
+        role: "user",
+        content: `Tell me about the song "${track.track}" by ${track.artist} from the album "${track.album}".`,
       },
     ],
-    max_tokens: 1000,
+    max_completion_tokens: 8000,
     temperature: 0.7,
     top_p: 1,
   });
@@ -598,7 +601,7 @@ export async function transcribeAudio(audioFile: Buffer): Promise<string> {
 
     const response = await openaiInstance.audio.transcriptions.create({
       file: new File([audioFile], `audio.${extension}`, { type: mimeType }),
-      model: "whisper-1",
+      model: "gpt-4o-transcribe",
       language: "en",
     });
 
@@ -626,7 +629,7 @@ export async function findTrackWithGPT(track: Track): Promise<Track> {
 
     const openaiInstance = getOpenAIInstance();
     const response = await openaiInstance.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-5.2",
       messages: [
         {
           role: "system",
@@ -655,7 +658,7 @@ export async function findTrackWithGPT(track: Track): Promise<Track> {
           content: `Find the exact album for: ${track.track} by ${track.artist}`,
         },
       ],
-      max_tokens: 100,
+      max_completion_tokens: 2000,
       temperature: 0.3,
     });
 
