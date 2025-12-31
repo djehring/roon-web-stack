@@ -20,8 +20,8 @@ services:
       HTTPS_PORT: "3443"
       # Optional: provide a real certificate/key (recommended).
       # These paths are inside the container. See README for mkcert setup.
-      SSL_CERT: "${SSL_CERT:-/usr/src/app/config/tls/roon-web-stack.crt}"
-      SSL_KEY: "${SSL_KEY:-/usr/src/app/config/tls/roon-web-stack.key}"
+      SSL_CERT: "/usr/src/app/config/certs/roon-web-stack.pem"
+      SSL_KEY: "/usr/src/app/config/certs/roon-web-stack-key.pem"
       # TLS certificate SANs for HTTPS (required for browser mic access on LAN IPs)
       # Example: CERT_HOSTS=192.168.0.13,roon-web.local
       CERT_HOSTS: "${CERT_HOSTS:-${NAS_HOST}}"
