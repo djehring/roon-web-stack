@@ -47,10 +47,12 @@ const isPortInUse = async (port: number, host: string): Promise<boolean> => {
 const init = async (): Promise<void> => {
   const httpServer = fastify({
     logger: buildLoggerOptions("debug"),
+    bodyLimit: 20 * 1024 * 1024, // 20MB for base64 encoded images
   });
 
   const httpsServer = fastify({
     logger: buildLoggerOptions("debug"),
+    bodyLimit: 20 * 1024 * 1024, // 20MB for base64 encoded images
     https: {
       key: fs.readFileSync(process.env.SSL_KEY as string),
       cert: fs.readFileSync(process.env.SSL_CERT as string),

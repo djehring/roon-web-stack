@@ -1,6 +1,8 @@
 import {
   AISearchResponse,
   AITrackStoryResponse,
+  AlbumRecognitionRequest,
+  AlbumRecognitionResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -528,6 +530,29 @@ class InternalRoonWebClient implements RoonWebClient {
       error?: string;
     };
     throw new Error(errorBody.error || "Unable to play item");
+  };
+
+  recognizeAlbum: (request: AlbumRecognitionRequest) => Promise<AlbumRecognitionResponse> = async (
+    request: AlbumRecognitionRequest
+  ): Promise<AlbumRecognitionResponse> => {
+    const clientPath = this.ensureStared();
+    const recognizeUrl = new URL(`${clientPath}/recognize-album`, this._apiHost);
+    const req = new Request(recognizeUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+    const response = await this.fetchRefreshed(req);
+    if (response.status === 200) {
+      return (await response.json()) as AlbumRecognitionResponse;
+    }
+    const errorBody = (await response.json().catch(() => ({ error: "Unknown error" }))) as {
+      error?: string;
+    };
+    throw new Error(errorBody.error || "Unable to recognize album");
   };
 
   private ensureStared: () => string = () => {

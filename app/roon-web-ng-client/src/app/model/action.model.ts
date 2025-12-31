@@ -9,6 +9,7 @@ export enum ActionType {
   CUSTOM = "CUSTOM",
   AI_SEARCH = "AI_SEARCH",
   AI_TRACK_STORY = "AI_TRACK_STORY",
+  ALBUM_RECOGNITION = "ALBUM_RECOGNITION",
 }
 
 export interface AISearchAction {
@@ -60,7 +61,19 @@ export interface RecordedAction {
   actionIndex: number;
 }
 
-export type Action = LoadAction | QueueAction | CustomAction | AISearchAction | AITrackStoryAction; // Update the union type
+export interface AlbumRecognitionAction {
+  id: string;
+  button: ActionButton;
+  type: ActionType.ALBUM_RECOGNITION;
+}
+
+export type Action =
+  | LoadAction
+  | QueueAction
+  | CustomAction
+  | AISearchAction
+  | AITrackStoryAction
+  | AlbumRecognitionAction;
 
 export interface LoadAction {
   button: ActionButton;
@@ -212,9 +225,19 @@ export const AITrackStoryAction: AITrackStoryAction = {
   },
 };
 
+export const AlbumRecognitionActionConst: AlbumRecognitionAction = {
+  id: "album-recognition-action",
+  type: ActionType.ALBUM_RECOGNITION,
+  button: {
+    label: "Album Recognition",
+    icon: "photo_camera",
+  },
+};
+
 export const DefaultActions: Action[] = [
   AlbumsAction,
   AISearchAction,
+  AlbumRecognitionActionConst,
   ArtistsAction,
   BrowseAction,
   ComposersAction,

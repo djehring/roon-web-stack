@@ -1,4 +1,5 @@
 import { defer, retry } from "rxjs";
+// Force rebuild - recognizeAlbum support
 import { roonWebClientFactory } from "@djehring/roon-web-client";
 import { RoonWebClient, SharedConfigMessage } from "@model";
 import {
@@ -16,6 +17,7 @@ import {
   QueueStateWorkerEvent,
   RawApiResult,
   RawWorkerApiRequest,
+  RecognizeAlbumApiResult,
   SearchAlbumsApiResult,
   TrackStoryApiResult,
   TranscriptionApiResult,
@@ -461,6 +463,26 @@ const onApiRequest = (apiRequest: RawWorkerApiRequest): void => {
         .catch((error: unknown) => {
           const message: PlayItemApiResult = {
             type: "play-item",
+            id,
+            error,
+          };
+          postApiResult(message);
+        });
+      break;
+    case "recognize-album":
+      void _roonClient
+        .recognizeAlbum(apiRequest.data)
+        .then((data) => {
+          const message: RecognizeAlbumApiResult = {
+            type: "recognize-album",
+            id,
+            data,
+          };
+          postApiResult(message);
+        })
+        .catch((error: unknown) => {
+          const message: RecognizeAlbumApiResult = {
+            type: "recognize-album",
             id,
             error,
           };

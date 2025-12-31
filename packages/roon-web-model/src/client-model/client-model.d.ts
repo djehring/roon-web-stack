@@ -51,6 +51,7 @@ export interface RoonWebClient {
   findItemIndex: (itemIndexSearch: ItemIndexSearch) => Promise<FoundItemIndexResponse>;
   searchAlbums: (zoneId: string, query: string) => Promise<SearchAlbumsResponse>;
   playItem: (zoneId: string, itemKey: string, actionTitle: string) => Promise<void>;
+  recognizeAlbum: (request: AlbumRecognitionRequest) => Promise<AlbumRecognitionResponse>;
   version: () => string;
 }
 
@@ -125,4 +126,23 @@ export interface PlayItemRequest {
   zoneId: string;
   item_key: string;
   actionTitle: string;
+}
+
+// Album recognition types for image-based album identification
+export interface AlbumRecognitionRequest {
+  image?: string;
+  mimeType?: string;
+  textHint?: string;
+  zoneId: string;
+}
+
+export interface AlbumRecognition {
+  albumTitle: string;
+  artistName: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface AlbumRecognitionResponse {
+  recognition?: AlbumRecognition;
+  libraryResults: LibrarySearchAlbumItem[];
 }

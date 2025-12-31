@@ -1,0 +1,160 @@
+<h2 mat-dialog-title class="recognition-dialog-title">
+  <mat-icon>photo_camera</mat-icon>
+  <span>Album Recognition</span>
+</h2>
+
+<mat-dialog-content>
+  <div class="recognition-container">
+    <!-- Image Drop Zone -->
+    <div
+      #dropZone
+      class="drop-zone"
+      [class.drag-over]="dragOver"
+      [class.has-image]="imageData"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
+      tabindex="0"
+    >
+      <div *ngIf="!imageData" class="drop-zone-content">
+        <mat-icon>add_photo_alternate</mat-icon>
+        <p>Drop album cover image here</p>
+        <p class="drop-hint">or paste from clipboard (Ctrl+V / Cmd+V)</p>
+        <button mat-stroked-button color="primary" (click)="selectFile()">
+          <mat-icon>folder_open</mat-icon>
+          Choose File
+        </button>
+      </div>
+
+      <div *ngIf="imageData" class="image-preview">
+        <img [src]="'data:' + imageMimeType + ';base64,' + imageData" alt="Album cover preview" />
+        <button
+          mat-icon-button
+          class="clear-image-button"
+          (click)="clearImage()"
+          aria-label="Clear image"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <input
+      #fileInput
+      type="file"
+      accept="image/*"
+      hidden
+      (change)="onFileSelected($event)"
+    />
+
+    <!-- Text Description Field -->
+    <div class="text-input-container">
+      <mat-form-field class="description-field">
+        <mat-label>Album description (optional)</mat-label>
+        <input
+          matInput
+          type="text"
+          inputmode="text"
+          [(ngModel)]="textDescription"
+          placeholder="e.g., Beatles Abbey Road, or classical symphony"
+          (keyup.enter)="recognizeAlbum()"
+        />
+        <button
+          *ngIf="textDescription"
+          matSuffix
+          mat-icon-button
+          aria-label="Clear"
+          (click)="textDescription = ''"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </mat-form-field>
+    </div>
+
+    <!-- Recognize Button -->
+    <div class="recognize-button-wrapper">
+      <button
+        mat-raised-button
+        color="primary"
+        class="recognize-button"
+        (click)="recognizeAlbum()"
+        [disabled]="(!imageData && !textDescription.trim()) || loading"
+      >
+        <mat-icon>search</mat-icon>
+        Recognize Album
+      </button>
+    </div>
+
+    <!-- Recognition Result -->
+    <div *ngIf="recognitionResult" class="recognition-result" [ngClass]="getConfidenceClass()">
+      <div class="result-header">
+        <mat-icon>auto_awesome</mat-icon>
+        <span>AI Recognition</span>
+        <span class="confidence-badge">{{ recognitionResult.confidence }}</span>
+      </div>
+      <div class="result-content">
+        <span class="result-album">{{ recognitionResult.albumTitle }}</span>
+        <span class="result-artist">{{ recognitionResult.artistName }}</span>
+      </div>
+    </div>
+
+    <!-- Results Container -->
+    <div class="results-container">
+      <div *ngIf="loading" class="loading-spinner">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Analyzing image...</p>
+      </div>
+
+      <mat-list *ngIf="!loading && searchResults.length > 0">
+        <mat-list-item
+          *ngFor="let album of searchResults"
+          class="album-item"
+        >
+          <div class="album-content">
+            <div class="album-cover">
+              <img
+                *ngIf="getAlbumImageUrl(album)"
+                [src]="getAlbumImageUrl(album)"
+                alt="Album cover"
+              />
+              <mat-icon *ngIf="!getAlbumImageUrl(album)">album</mat-icon>
+            </div>
+            <div class="album-info">
+              <span class="album-title">{{ album.title }}</span>
+              <span class="album-artist" *ngIf="album.subtitle">
+                {{ album.subtitle }}
+              </span>
+            </div>
+            <button
+              mat-raised-button
+              color="primary"
+              class="play-button"
+              (click)="playAlbum(album)"
+            >
+              <mat-icon>play_arrow</mat-icon>
+              Play
+            </button>
+          </div>
+        </mat-list-item>
+      </mat-list>
+
+      <div
+        *ngIf="!loading && searchResults.length === 0 && (imageData || textDescription.trim())"
+        class="no-results-container"
+      >
+        <mat-icon>search_off</mat-icon>
+        <p *ngIf="recognitionResult">
+          No albums found in your library matching
+          "{{ recognitionResult.albumTitle }}" by {{ recognitionResult.artistName }}.
+        </p>
+        <p *ngIf="!recognitionResult">
+          Click "Recognize Album" to search your library.
+        </p>
+      </div>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="closeDialog()">Cancel</button>
+</mat-dialog-actions>

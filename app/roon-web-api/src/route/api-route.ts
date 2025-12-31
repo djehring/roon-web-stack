@@ -4,6 +4,7 @@ import { FastifySSEPlugin } from "fastify-sse-v2";
 import { fastifyMultipart } from "@fastify/multipart";
 import { extension_version, logger, roon } from "@infrastructure";
 import {
+  AlbumRecognition,
   Client,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -16,6 +17,7 @@ import {
   fetchTrackStory,
   fetchTrackSuggestions,
   isMissingOpenAIKeyError,
+  recognizeAlbumFromImage,
   transcribeAudio,
 } from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
@@ -61,6 +63,13 @@ interface PlayItemBody {
   zoneId: string;
   item_key: string;
   actionTitle: string;
+}
+
+interface RecognizeAlbumBody {
+  image?: string;
+  mimeType?: string;
+  textHint?: string;
+  zoneId: string;
 }
 
 const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<void> => {
@@ -377,6 +386,76 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       return await reply.status(500).send({ error: message });
     }
   });
+
+  // Album recognition endpoint for image-based album identification
+  server.post<{ Params: ClientIdParam; Body: RecognizeAlbumBody }>(
+    "/:client_id/recognize-album",
+    async (req, reply) => {
+      const { client, badRequestReply } = getClient(req, reply);
+      if (!client) {
+        return badRequestReply;
+      }
+
+      const { image, mimeType, textHint, zoneId } = req.body;
+
+      // Must have either image or textHint
+      if (!image && !textHint) {
+        return reply.status(400).send({ error: "Either image or textHint is required" });
+      }
+
+      if (!zoneId) {
+        return reply.status(400).send({ error: "zoneId is required" });
+      }
+
+      try {
+        let recognition: AlbumRecognition | undefined;
+        let searchQuery: string | undefined;
+
+        if (image && mimeType) {
+          // Use OpenAI Vision to recognize the album
+          recognition = await recognizeAlbumFromImage(image, mimeType, textHint);
+          // Build search query from recognition result
+          if (recognition.albumTitle !== "Unknown" && recognition.artistName !== "Unknown") {
+            searchQuery = `${recognition.artistName} ${recognition.albumTitle}`;
+          } else if (recognition.albumTitle !== "Unknown") {
+            searchQuery = recognition.albumTitle;
+          } else if (recognition.artistName !== "Unknown") {
+            searchQuery = recognition.artistName;
+          } else if (textHint) {
+            // Fall back to text hint if recognition failed
+            searchQuery = textHint;
+          }
+        } else if (textHint) {
+          // Text-only search
+          searchQuery = textHint;
+        }
+
+        // If no valid search query could be determined, return empty results
+        if (!searchQuery) {
+          return await reply.status(200).send({
+            recognition,
+            libraryResults: [],
+          });
+        }
+
+        // Search the Roon library
+        const libraryResults = await searchAlbumsInLibrary(req.params.client_id, zoneId, searchQuery);
+
+        return await reply.status(200).send({
+          recognition,
+          libraryResults,
+        });
+      } catch (error) {
+        if (isMissingOpenAIKeyError(error)) {
+          return await reply.status(503).send({
+            error: "OpenAI API key not configured",
+          });
+        }
+        logger.error(`Error recognizing album: ${JSON.stringify(error)}`);
+        return await reply.status(500).send({ error: "Failed to recognize album" });
+      }
+    }
+  );
 };
 
 const getClient = (

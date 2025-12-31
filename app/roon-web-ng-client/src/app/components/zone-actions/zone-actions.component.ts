@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Input, Signal, Te
 import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatDialogConfig } from "@angular/material/dialog";
 import { MatIcon } from "@angular/material/icon";
+import { AlbumRecognitionDialogComponent } from "@components/album-recognition-dialog/album-recognition-dialog.component";
 import { FullScreenToggleComponent } from "@components/full-screen-toggle/full-screen-toggle.component";
 import { RoonAISearchDialogComponent } from "@components/roon-aisearch-dialog/roon-aisearch-dialog.component";
 import { RoonBrowseDialogComponent } from "@components/roon-browse-dialog/roon-browse-dialog.component";
@@ -79,6 +80,9 @@ export class ZoneActionsComponent {
       case ActionType.CUSTOM:
         this.executeCustomAction(action);
         break;
+      case ActionType.ALBUM_RECOGNITION:
+        this.openAlbumRecognitionDialog();
+        break;
     }
   }
 
@@ -123,6 +127,23 @@ export class ZoneActionsComponent {
       config.maxWidth = "95svw";
     }
     this._dialogService.open(RoonAISearchDialogComponent, config);
+  }
+
+  private openAlbumRecognitionDialog() {
+    const config: MatDialogConfig = {
+      restoreFocus: false,
+      height: "90svh",
+      maxHeight: "90svh",
+      width: "90svw",
+      maxWidth: "90svw",
+    };
+    if (this._$isOneColumn()) {
+      config.height = "95svh";
+      config.maxHeight = "95svh";
+      config.width = "95svw";
+      config.maxWidth = "95svw";
+    }
+    this._dialogService.open(AlbumRecognitionDialogComponent, config);
   }
 
   openSettingsDialog() {

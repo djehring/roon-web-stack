@@ -1,6 +1,8 @@
 import {
   AISearchResponse,
   AITrackStoryResponse,
+  AlbumRecognitionRequest,
+  AlbumRecognitionResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -125,6 +127,10 @@ export interface PlayItemWorkerApiRequest
   type: "play-item";
 }
 
+export interface RecognizeAlbumWorkerApiRequest extends WorkerApiRequest<AlbumRecognitionRequest> {
+  type: "recognize-album";
+}
+
 export type RawWorkerApiRequest =
   | BrowseWorkerApiRequest
   | LoadWorkerApiRequest
@@ -139,7 +145,8 @@ export type RawWorkerApiRequest =
   | TrackStoryWorkerApiRequest
   | TranscriptionWorkerApiRequest
   | SearchAlbumsWorkerApiRequest
-  | PlayItemWorkerApiRequest;
+  | PlayItemWorkerApiRequest
+  | RecognizeAlbumWorkerApiRequest;
 
 export interface WorkerApiRequestMessage extends WorkerMessage<RawWorkerApiRequest> {
   event: "worker-api";
@@ -234,6 +241,10 @@ export interface PlayItemApiResult extends ApiResult<void> {
   type: "play-item";
 }
 
+export interface RecognizeAlbumApiResult extends ApiResult<AlbumRecognitionResponse> {
+  type: "recognize-album";
+}
+
 export type RawApiResult =
   | BrowseApiResult
   | LoadApiResult
@@ -245,7 +256,8 @@ export type RawApiResult =
   | TrackStoryApiResult
   | TranscriptionApiResult
   | SearchAlbumsApiResult
-  | PlayItemApiResult;
+  | PlayItemApiResult
+  | RecognizeAlbumApiResult;
 
 export interface ApiResultWorkerEvent extends WorkerEvent<RawApiResult> {
   event: "apiResult";
@@ -261,7 +273,8 @@ export interface ApiResultCallback<
     | AISearchResponse
     | AITrackStoryResponse
     | TranscriptionResponse
-    | SearchAlbumsResponse,
+    | SearchAlbumsResponse
+    | AlbumRecognitionResponse,
 > {
   next: (u: U) => void;
   error?: (error: unknown) => void;

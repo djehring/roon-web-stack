@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { OpenAI } from "openai";
 import path from "path";
 import { logger } from "@infrastructure";
+import { AlbumRecognition } from "@model";
 import { getUKChartData, isUKChartQuery } from "@service";
 import { Track, TrackStory } from "./types/track";
 
@@ -695,5 +696,112 @@ export async function findTrackWithGPT(track: Track): Promise<Track> {
   } catch (error) {
     logger.error("Error finding track with GPT:", error);
     return track;
+  }
+}
+
+/**
+ * Uses OpenAI Vision to recognize an album from an image and/or text hint.
+ * @param imageBase64 Base64-encoded image data (without data URL prefix)
+ * @param mimeType The MIME type of the image (e.g., "image/png", "image/jpeg")
+ * @param textHint Optional text description to help identify the album
+ * @returns Album recognition result with title, artist, and confidence
+ */
+export async function recognizeAlbumFromImage(
+  imageBase64: string,
+  mimeType: string,
+  textHint?: string
+): Promise<AlbumRecognition> {
+  try {
+    const openaiInstance = getOpenAIInstance();
+
+    const systemPrompt = `You are an expert at identifying music albums from images.
+When shown an album cover or related image, identify:
+1. The album title (exact name as it appears on streaming platforms)
+2. The artist name
+3. Your confidence level: "high" if you're certain, "medium" if likely but not 100% sure, "low" if it's a guess
+
+CRITICAL INSTRUCTIONS:
+- Return ONLY valid JSON in this exact format: {"albumTitle": "...", "artistName": "...", "confidence": "high|medium|low"}
+- Do NOT include any explanation or additional text
+- Use the EXACT album and artist names as they appear on streaming platforms
+- If you cannot identify the album, return: {"albumTitle": "Unknown", "artistName": "Unknown", "confidence": "low"}`;
+
+    const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+      {
+        type: "image_url",
+        image_url: {
+          url: `data:${mimeType};base64,${imageBase64}`,
+          detail: "high",
+        },
+      },
+    ];
+
+    if (textHint && textHint.trim()) {
+      userContent.push({
+        type: "text",
+        text: `Additional context: ${textHint.trim()}`,
+      });
+    } else {
+      userContent.push({
+        type: "text",
+        text: "Please identify this album from the image.",
+      });
+    }
+
+    const response = await openaiInstance.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+    });
+
+    const messageContent = response.choices[0].message.content;
+    if (!messageContent) {
+      logger.error("No content returned from OpenAI Vision");
+      return {
+        albumTitle: "Unknown",
+        artistName: "Unknown",
+        confidence: "low",
+      };
+    }
+
+    // Parse the JSON response
+    const parsed = JSON.parse(messageContent.trim()) as Record<string, unknown>;
+
+    // Validate the response structure
+    if (
+      typeof parsed.albumTitle !== "string" ||
+      typeof parsed.artistName !== "string" ||
+      !["high", "medium", "low"].includes(parsed.confidence as string)
+    ) {
+      logger.error("Invalid response structure from OpenAI Vision:", parsed);
+      return {
+        albumTitle: "Unknown",
+        artistName: "Unknown",
+        confidence: "low",
+      };
+    }
+
+    const result: AlbumRecognition = {
+      albumTitle: parsed.albumTitle,
+      artistName: parsed.artistName,
+      confidence: parsed.confidence as "high" | "medium" | "low",
+    };
+
+    logger.debug(
+      `Album recognized: ${result.artistName} - ${result.albumTitle} ` + `(confidence: ${result.confidence})`
+    );
+
+    return result;
+  } catch (error) {
+    logger.error("Error recognizing album from image:", error);
+    return {
+      albumTitle: "Unknown",
+      artistName: "Unknown",
+      confidence: "low",
+    };
   }
 }

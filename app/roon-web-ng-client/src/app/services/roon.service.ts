@@ -6,6 +6,8 @@ import { computed, inject, Injectable, Signal, signal, WritableSignal } from "@a
 import {
   AISearchResponse,
   AITrackStoryResponse,
+  AlbumRecognitionRequest,
+  AlbumRecognitionResponse,
   ApiState,
   ClientRoonApiBrowseLoadOptions,
   ClientRoonApiBrowseOptions,
@@ -49,6 +51,8 @@ import {
   RawApiResult,
   RawWorkerApiRequest,
   RawWorkerEvent,
+  RecognizeAlbumApiResult,
+  RecognizeAlbumWorkerApiRequest,
   SearchAlbumsApiResult,
   SearchAlbumsWorkerApiRequest,
   TrackStoryApiResult,
@@ -99,6 +103,7 @@ export class RoonService {
   private readonly _apiTranscriptionCallbacks: Map<number, ApiResultCallback<TranscriptionResponse>> = new Map();
   private readonly _apiSearchAlbumsCallbacks: Map<number, ApiResultCallback<SearchAlbumsResponse>> = new Map();
   private readonly _apiPlayItemCallbacks: Map<number, ApiResultCallback<undefined>> = new Map();
+  private readonly _apiRecognizeAlbumCallbacks: Map<number, ApiResultCallback<AlbumRecognitionResponse>> = new Map();
   private _workerApiRequestId: number;
   private _isStarted: boolean;
   private _outputCallback?: OutputCallback;
@@ -560,6 +565,31 @@ export class RoonService {
     });
   };
 
+  recognizeAlbum: (request: AlbumRecognitionRequest) => Promise<AlbumRecognitionResponse> = (request) => {
+    const worker = this.ensureStarted();
+    const id = this.nextWorkerApiRequestId();
+    const apiRequest: RecognizeAlbumWorkerApiRequest = {
+      id,
+      type: "recognize-album",
+      data: request,
+    };
+    return new Promise((resolve, reject) => {
+      const apiResultCallback: ApiResultCallback<AlbumRecognitionResponse> = {
+        next: (response) => {
+          resolve(response);
+        },
+        error: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      };
+      this._apiRecognizeAlbumCallbacks.set(id, apiResultCallback);
+      worker.postMessage({
+        event: "worker-api",
+        data: apiRequest,
+      });
+    });
+  };
+
   private reconnect: () => void = () => {
     if (this._worker) {
       const message: WorkerClientActionMessage = {
@@ -728,6 +758,9 @@ export class RoonService {
       case "play-item":
         this.onPlayItemApiResult(apiResultEvent);
         break;
+      case "recognize-album":
+        this.onRecognizeAlbumApiResult(apiResultEvent);
+        break;
     }
   }
 
@@ -858,6 +891,18 @@ export class RoonService {
         callback.next(undefined);
       }
       this._apiPlayItemCallbacks.delete(apiResult.id);
+    }
+  }
+
+  private onRecognizeAlbumApiResult(apiResult: RecognizeAlbumApiResult) {
+    const callback = this._apiRecognizeAlbumCallbacks.get(apiResult.id);
+    if (callback) {
+      if (apiResult.data) {
+        callback.next(apiResult.data);
+      } else if (callback.error) {
+        callback.error(apiResult.error || new Error("No data received"));
+      }
+      this._apiRecognizeAlbumCallbacks.delete(apiResult.id);
     }
   }
 
