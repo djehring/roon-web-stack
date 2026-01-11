@@ -35,7 +35,7 @@
   mat-dialog-actions {
     flex: 0 0 auto;
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     align-items: center;
     padding: 16px 24px;
     margin: 0;
@@ -44,6 +44,10 @@
     background: white;
     border-top: 1px solid rgba(0, 0, 0, 0.12);
     min-height: 64px;
+
+    .spacer {
+      flex: 1;
+    }
   }
 
   .recognition-container {
@@ -197,99 +201,14 @@
     }
   }
 
-  .recognition-result {
-    flex: 0 0 auto;
-    background: rgba(25, 118, 210, 0.05);
-    border: 1px solid rgba(25, 118, 210, 0.2);
-    border-radius: 8px;
-    padding: 12px 16px;
-
-    &.confidence-high {
-      background: rgba(76, 175, 80, 0.05);
-      border-color: rgba(76, 175, 80, 0.3);
-
-      .confidence-badge {
-        background: #4caf50;
-      }
-    }
-
-    &.confidence-medium {
-      background: rgba(255, 152, 0, 0.05);
-      border-color: rgba(255, 152, 0, 0.3);
-
-      .confidence-badge {
-        background: #ff9800;
-      }
-    }
-
-    &.confidence-low {
-      background: rgba(244, 67, 54, 0.05);
-      border-color: rgba(244, 67, 54, 0.3);
-
-      .confidence-badge {
-        background: #f44336;
-      }
-    }
-
-    .result-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-
-      mat-icon {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
-        color: #1976d2;
-      }
-
-      span:first-of-type {
-        font-size: 12px;
-        font-weight: 500;
-        color: rgba(0, 0, 0, 0.6);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .confidence-badge {
-        margin-left: auto;
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        padding: 2px 8px;
-        border-radius: 10px;
-        color: white;
-        background: #1976d2;
-      }
-    }
-
-    .result-content {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-
-      .result-album {
-        font-size: 16px;
-        font-weight: 500;
-        color: rgba(0, 0, 0, 0.87);
-      }
-
-      .result-artist {
-        font-size: 14px;
-        color: rgba(0, 0, 0, 0.6);
-      }
-    }
-  }
-
   .results-container {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    overflow: visible;
+    overflow: hidden;
     width: 100%;
     min-width: 0;
-    min-height: 150px;
+    min-height: 0;
     box-sizing: border-box;
 
     mat-list {
@@ -302,7 +221,6 @@
       background: white;
       width: 100%;
       min-width: 0;
-      max-height: 300px;
       box-sizing: border-box;
     }
   }
@@ -335,15 +253,44 @@
     &:hover {
       background-color: rgba(0, 0, 0, 0.02);
     }
+
+    &.ai-match {
+      background-color: rgba(76, 175, 80, 0.06);
+      border-left: 3px solid #4caf50;
+
+      &:hover {
+        background-color: rgba(76, 175, 80, 0.1);
+      }
+    }
   }
 
   .album-content {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     padding: 12px 16px;
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .ai-match-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4caf50;
+
+    &.confidence-high {
+      background: #4caf50;
+    }
+
+    &.confidence-medium {
+      background: #ff9800;
+    }
+
+    &.confidence-low {
+      background: #f44336;
+    }
   }
 
   .album-cover {
@@ -376,11 +323,11 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     overflow: hidden;
 
     .album-title {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 500;
       color: rgba(0, 0, 0, 0.87);
       white-space: nowrap;
@@ -389,7 +336,7 @@
     }
 
     .album-artist {
-      font-size: 14px;
+      font-size: 13px;
       color: rgba(0, 0, 0, 0.6);
       white-space: nowrap;
       overflow: hidden;
@@ -399,10 +346,11 @@
 
   .play-button {
     flex-shrink: 0;
-    min-width: 100px;
 
     mat-icon {
-      margin-right: 4px;
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
     }
   }
 

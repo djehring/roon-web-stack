@@ -45,6 +45,7 @@ export class AlbumRecognitionDialogComponent implements AfterViewInit {
   protected searchResults: LibrarySearchAlbumItem[] = [];
   protected recognitionResult: AlbumRecognition | null = null;
   protected dragOver = false;
+  protected searchCompleted = false;
 
   private readonly roonService = inject(RoonService);
   private readonly messageService = inject(MessageService);
@@ -155,8 +156,9 @@ export class AlbumRecognitionDialogComponent implements AfterViewInit {
       .then((response) => {
         this.ngZone.run(() => {
           this.recognitionResult = response.recognition || null;
-          this.searchResults = response.libraryResults;
+          this.searchResults = this.sortResultsWithAIMatchesFirst(response.libraryResults);
           this.loading = false;
+          this.searchCompleted = true;
 
           if (this.searchResults.length === 0) {
             if (this.recognitionResult) {
@@ -215,6 +217,78 @@ export class AlbumRecognitionDialogComponent implements AfterViewInit {
   public getConfidenceClass(): string {
     if (!this.recognitionResult) return "";
     return `confidence-${this.recognitionResult.confidence}`;
+  }
+
+  /**
+   * Parses Roon's [[id|name]] format and extracts just the name
+   * Falls back to the original string if not in the expected format
+   */
+  public parseArtistSubtitle(subtitle: string | undefined): string {
+    if (!subtitle) return "";
+    // Match [[number|name]] pattern and extract the name
+    const match = subtitle.match(/\[\[(\d+)\|([^\]]+)\]\]/);
+    if (match) {
+      return match[2];
+    }
+    return subtitle;
+  }
+
+  /**
+   * Checks if an album item matches the AI recognition result
+   * Uses case-insensitive comparison of title and artist
+   */
+  public isAIMatch(album: LibrarySearchAlbumItem): boolean {
+    if (!this.recognitionResult) return false;
+
+    const recognizedTitle = this.recognitionResult.albumTitle.toLowerCase();
+    const recognizedArtist = this.recognitionResult.artistName.toLowerCase();
+    const albumTitle = album.title.toLowerCase();
+    const albumArtist = this.parseArtistSubtitle(album.subtitle).toLowerCase();
+
+    // Check if the album title contains the recognized title or vice versa
+    const titleMatch = albumTitle.includes(recognizedTitle) || recognizedTitle.includes(albumTitle);
+
+    // Check if the artist matches
+    const artistMatch = albumArtist.includes(recognizedArtist) || recognizedArtist.includes(albumArtist);
+
+    return titleMatch && artistMatch;
+  }
+
+  /**
+   * Returns true when search has completed and we have results to display
+   */
+  public hasResults(): boolean {
+    return this.searchCompleted && !this.loading;
+  }
+
+  /**
+   * Resets the dialog to search again
+   */
+  public searchAgain(): void {
+    this.searchResults = [];
+    this.recognitionResult = null;
+    this.searchCompleted = false;
+    this.imageData = null;
+    this.imageMimeType = null;
+    this.textDescription = "";
+    this.fileInput.nativeElement.value = "";
+    // Focus the drop zone after view updates
+    setTimeout(() => {
+      this.dropZone.nativeElement.focus();
+    });
+  }
+
+  /**
+   * Sorts results so AI matches appear first
+   */
+  private sortResultsWithAIMatchesFirst(results: LibrarySearchAlbumItem[]): LibrarySearchAlbumItem[] {
+    return [...results].sort((a, b) => {
+      const aMatch = this.isAIMatch(a);
+      const bMatch = this.isAIMatch(b);
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return 0;
+    });
   }
 
   private handleImageFile(file: File): void {
