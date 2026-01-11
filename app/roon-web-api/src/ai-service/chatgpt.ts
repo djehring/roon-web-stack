@@ -423,7 +423,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 
     const openaiInstance = getOpenAIInstance();
     const response = await openaiInstance.chat.completions.create({
-      model: "gpt-5.2",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -482,7 +482,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
                     }`,
         },
       ],
-      max_completion_tokens: 4000, // Increased for GPT-5.2 reasoning tokens
+      max_tokens: 2000,
       temperature: 0.3, // Lower temperature for more factual responses
       top_p: 1, // Default value for focused sampling
     });
@@ -535,7 +535,7 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
 async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
   const openaiInstance = getOpenAIInstance();
   const response = await openaiInstance.chat.completions.create({
-    model: "gpt-5.2",
+    model: "gpt-4o",
     messages: [
       {
         role: "system",
@@ -555,7 +555,7 @@ async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
         content: `Tell me about the song "${track.track}" by ${track.artist} from the album "${track.album}".`,
       },
     ],
-    max_completion_tokens: 8000,
+    max_tokens: 4000,
     temperature: 0.7,
     top_p: 1,
   });
@@ -630,7 +630,7 @@ export async function findTrackWithGPT(track: Track): Promise<Track> {
 
     const openaiInstance = getOpenAIInstance();
     const response = await openaiInstance.chat.completions.create({
-      model: "gpt-5.2",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -659,7 +659,7 @@ export async function findTrackWithGPT(track: Track): Promise<Track> {
           content: `Find the exact album for: ${track.track} by ${track.artist}`,
         },
       ],
-      max_completion_tokens: 2000,
+      max_tokens: 500,
       temperature: 0.3,
     });
 
