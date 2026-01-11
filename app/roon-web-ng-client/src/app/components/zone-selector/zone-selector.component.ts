@@ -29,6 +29,7 @@ import { SettingsService } from "@services/settings.service";
 })
 export class ZoneSelectorComponent {
   @Input({ required: false, transform: booleanAttribute }) withoutLabel: boolean;
+  @Input({ required: false, transform: booleanAttribute }) compactLabel: boolean;
   @Input({ required: false }) xPosition: "before" | "after";
   @Input({ required: false }) yPosition: "below" | "above";
   readonly idSuffix = input<string>("");
@@ -48,6 +49,7 @@ export class ZoneSelectorComponent {
     this._settingsService = inject(SettingsService);
     this._spatialNavigableService = inject(NgxSpatialNavigableService);
     this.withoutLabel = false;
+    this.compactLabel = false;
     this.xPosition = "before";
     this.yPosition = "above";
     this._$zoneId = this._settingsService.displayedZoneId();

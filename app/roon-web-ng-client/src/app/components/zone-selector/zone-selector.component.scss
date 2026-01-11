@@ -12,3 +12,16 @@
     height: 1.5rem;
   }
 }
+
+.compact-label {
+  max-width: 100%;
+
+  .zone-name {
+    display: inline-block;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+}

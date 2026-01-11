@@ -6,6 +6,15 @@
     (menuClosed)="onSelectorClose()"
     [id]="'zone-selector-icon' + $idSuffix()"
   ><mat-icon fontIcon="speaker" /></button>
+} @else if (compactLabel) {
+  <button
+    mat-button
+    class="compact-label"
+    [matMenuTriggerFor]="zoneSelector"
+    (menuOpened)="onSelectorOpen()"
+    (menuClosed)="onSelectorClose()"
+    [id]="'zone-selector-compact' + $idSuffix()"
+  ><mat-icon fontIcon="speaker" /><span class="zone-name">{{$label()}}</span></button>
 } @else {
   <button
     mat-button
