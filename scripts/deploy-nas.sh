@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Load environment variables
+# Load environment variables (filter out comments and empty lines)
 if [ -f .env ]; then
-    export $(cat .env | xargs)
+    export $(grep -v '^#' .env | grep -v '^$' | xargs)
 fi
 
 # Check if required variables are set
