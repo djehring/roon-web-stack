@@ -333,11 +333,63 @@ function normalizeString(str: string): string {
   return str.toLowerCase().trim();
 }
 
+/**
+ * Temporal/qualitative modifiers that GPT may not handle well due to knowledge cutoff
+ */
+const TEMPORAL_MODIFIERS = [
+  /\b(latest|newest|most recent|new)\s+(release|album|record|single|ep)/i,
+  /\b(recent|new)\s+(releases|albums|records|singles|eps)/i,
+  /\b(latest|newest|most recent)\s+(tracks?|songs?)/i,
+  /\bfrom\s+(this|last)\s+year\b/i,
+  /\b(2024|2025|2026)\s+(release|album)/i,
+];
+
+/**
+ * Detects if a query contains temporal modifiers that GPT cannot reliably answer
+ */
+function hasTemporalModifier(query: string): boolean {
+  return TEMPORAL_MODIFIERS.some((pattern) => pattern.test(query));
+}
+
+/**
+ * Extracts the artist name from a query by removing temporal modifiers
+ */
+function extractArtistFromTemporalQuery(query: string): string {
+  let cleaned = query;
+  // Remove temporal phrases
+  const temporalPhrases = [
+    /\b(latest|newest|most recent|new)\s+(release|album|record|single|ep|tracks?|songs?)\b/gi,
+    /\b(recent|new)\s+(releases|albums|records|singles|eps)\b/gi,
+    /\bfrom\s+(this|last)\s+year\b/gi,
+    /\b(2024|2025|2026)\s+(release|album)\b/gi,
+    /\bby\b/gi,
+    /\bfrom\b/gi,
+  ];
+  for (const pattern of temporalPhrases) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  // Clean up extra whitespace
+  return cleaned.replace(/\s+/g, " ").trim();
+}
+
 export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
   try {
     //throw error if query empty
     if (!query) {
       query = "Molly Tuttle tracks";
+    }
+
+    // Pre-process temporal queries - extract artist and modify query
+    let isTemporalQuery = false;
+    const originalQuery = query;
+    if (hasTemporalModifier(query)) {
+      isTemporalQuery = true;
+      const artistName = extractArtistFromTemporalQuery(query);
+      if (artistName) {
+        logger.debug(`TEMPORAL QUERY DETECTED: "${query}" -> extracting artist: "${artistName}"`);
+        // Modify query to focus on well-known tracks by the artist
+        query = `${artistName} popular tracks`;
+      }
     }
 
     // Check if this is a UK chart query
@@ -446,6 +498,19 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
                     ***IF THE SEARCH IS FOR A SINGLE TRACK (e.g. Virginia Plain by Bryan Ferry) THEN ONLY RETURN ONE ITEM WHICH IS THE BEST SELLING UK ALBUM CONTAINING THE TRACK***
                     ***DOUBLE-CHECK THAT THE TRACK IS ACTUALLY ON THE ALBUM BEFORE RETURNING IT - THIS IS CRITICAL***
                     
+                    ***IMPORTANT: ALWAYS RETURN RESULTS - NEVER RETURN AN EMPTY RESPONSE***
+                    ***If asked about an artist, return their well-known tracks from their discography***
+                    ***If you cannot find exact matches, return the artist's most popular/acclaimed tracks***
+                    
+                    ${
+                      isTemporalQuery
+                        ? `***TEMPORAL QUERY NOTE:***
+                    ***The original query was "${originalQuery}" which asked for recent/latest releases***
+                    ***Since you may not have current release information, return well-known tracks by this artist***
+                    ***Focus on tracks from their most acclaimed or popular studio albums***
+                    ***Return 5-10 representative tracks that showcase the artist's work***`
+                        : ""
+                    }
                     ${
                       isUKChartQueryLegacy
                         ? `***FOR UK CHART QUERIES:***
@@ -731,7 +796,7 @@ CRITICAL INSTRUCTIONS:
         type: "image_url",
         image_url: {
           url: `data:${mimeType};base64,${imageBase64}`,
-          detail: "high",
+          detail: "auto",
         },
       },
     ];
@@ -756,6 +821,7 @@ CRITICAL INSTRUCTIONS:
       ],
       max_tokens: 500,
       temperature: 0.3,
+      response_format: { type: "json_object" },
     });
 
     const messageContent = response.choices[0].message.content;
@@ -768,8 +834,9 @@ CRITICAL INSTRUCTIONS:
       };
     }
 
-    // Parse the JSON response
-    const parsed = JSON.parse(messageContent.trim()) as Record<string, unknown>;
+    // Parse the JSON response, stripping markdown fences if present
+    const jsonStr = messageContent.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
 
     // Validate the response structure
     if (
