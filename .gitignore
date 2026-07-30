@@ -12,6 +12,7 @@ config.json
 .idea/webstorm.xml
 .idea/.gitignore
 .*
+!.dockerignore
 .env
 /app/roon-web-api/cache
 /app/roon-web-api/data

@@ -5,7 +5,9 @@ FROM node:22-alpine${ALPINE_VERSION} AS builder
 RUN apk add --no-cache git
 WORKDIR /usr/src/roon-web-stack
 COPY . .
-RUN corepack enable yarn && yarn install && yarn build
+RUN corepack enable yarn \
+  && yarn install --immutable \
+  && yarn build
 
 FROM alpine:${ALPINE_VERSION}
 WORKDIR /usr/src/app
