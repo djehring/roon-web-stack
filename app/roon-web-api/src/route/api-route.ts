@@ -12,7 +12,7 @@ import {
   RoonImageFormat,
   RoonImageScale,
 } from "@model";
-import { clientManager } from "@service";
+import { clientManager, InvalidPairingPinError } from "@service";
 import {
   fetchTrackStory,
   fetchTrackSuggestions,
@@ -72,6 +72,10 @@ interface RecognizeAlbumBody {
   zoneId: string;
 }
 
+interface PairBody {
+  pin?: string;
+}
+
 const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<void> => {
   await server.register(FastifySSEPlugin);
   await server.register(fastifyMultipart as FastifyPluginCallback);
@@ -83,6 +87,24 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     const client_id = clientManager.register(previous_client_id);
     const location = `/api/${client_id}`;
     return reply.status(201).header("location", location).send();
+  });
+  server.post<{ Body: PairBody }>("/pair", (req, reply) => {
+    try {
+      const client_id = clientManager.pair(req.body.pin ?? "");
+      const location = `/api/${client_id}`;
+      return reply.status(201).header("location", location).send();
+    } catch (err: unknown) {
+      if (err instanceof InvalidPairingPinError) {
+        return reply.status(403).send();
+      }
+      throw err;
+    }
+  });
+  server.get("/pairing", (_req, reply) => {
+    return reply.status(200).send({ pin: clientManager.pairingPin() });
+  });
+  server.post("/pairing", (_req, reply) => {
+    return reply.status(200).send({ pin: clientManager.rotatePairingPin() });
   });
   server.post<{ Params: ClientIdParam }>("/:client_id/unregister", (req, reply) => {
     const client_id = req.params.client_id;

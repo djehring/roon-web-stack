@@ -18,6 +18,9 @@ export interface Client {
 
 export interface ClientManager {
   register: (previous_client_id?: string) => string;
+  pair: (pin: string) => string;
+  pairingPin: () => string;
+  rotatePairingPin: () => string;
   unregister: (client_id: string) => void;
   get: (client_id: string) => Client;
   start: () => Promise<void>;
