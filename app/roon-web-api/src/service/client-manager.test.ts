@@ -3,6 +3,9 @@ import { zoneManagerMock } from "../data/zone-manager.mock";
 import { roonMock } from "../infrastructure/roon-extension.mock";
 import { commandDispatcherMock } from "./command-dispatcher.mock";
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { Subject } from "rxjs";
 import { logger } from "@infrastructure";
 import {
@@ -25,7 +28,10 @@ describe("client-manager.ts test suite", () => {
   let roonSseMessages: RoonSseMessage[];
   let roonSseMessageSubject: Subject<RoonSseMessage>;
   let client_id_counter: number;
+  let pairingFile: string;
   beforeEach(() => {
+    pairingFile = path.join(os.tmpdir(), `roon-pairing-${process.pid}-${Date.now()}-${Math.random()}.json`);
+    process.env.PAIRING_FILE = pairingFile;
     jest.isolateModules((): void => {
       void import("./client-manager")
         .then((module) => {
@@ -50,6 +56,8 @@ describe("client-manager.ts test suite", () => {
   });
 
   afterEach(() => {
+    fs.rmSync(pairingFile, { force: true });
+    delete process.env.PAIRING_FILE;
     jest.clearAllMocks();
     jest.resetAllMocks();
     jest.resetModules();
@@ -85,6 +93,36 @@ describe("client-manager.ts test suite", () => {
     const previousClientId = "previous_client_id";
     const client_id = clientManager.register(previousClientId);
     expect(client_id).toEqual(previousClientId);
+  });
+
+  it("clientManager#register should not require a pairing PIN", async () => {
+    await clientManager.start();
+    const client_id = clientManager.register();
+    expect(clientManager.get(client_id)).toBeDefined();
+  });
+
+  it("clientManager#pair should register a client when the PIN matches", async () => {
+    await clientManager.start();
+    const pin = clientManager.pairingPin();
+    const client_id = clientManager.pair(pin);
+    expect(clientManager.get(client_id)).toBeDefined();
+  });
+
+  it("clientManager#pair should throw when the PIN does not match", async () => {
+    await clientManager.start();
+    const pin = clientManager.pairingPin();
+    const wrong = pin === "000000" ? "111111" : "000000";
+    expect(() => clientManager.pair(wrong)).toThrow("invalid pairing pin");
+  });
+
+  it("clientManager#rotatePairingPin should reject the previous PIN", async () => {
+    await clientManager.start();
+    const previous = clientManager.pairingPin();
+    const rotated = clientManager.rotatePairingPin();
+    expect(rotated).toMatch(/^\d{6}$/);
+    expect(rotated).not.toBe(previous);
+    expect(() => clientManager.pair(previous)).toThrow("invalid pairing pin");
+    expect(clientManager.pair(rotated)).toBeDefined();
   });
 
   it("clientManager#register should not create a new client if an existing client exists for provided previous_client_id", async () => {

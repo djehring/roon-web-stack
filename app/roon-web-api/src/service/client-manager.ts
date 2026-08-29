@@ -17,6 +17,7 @@ import {
 import { commandDispatcher } from "@service";
 import { Track } from "../ai-service/types/track";
 import { findTracksInRoon } from "./client-tracks-manager";
+import { InvalidPairingPinError, pairingStore } from "./pairing-store";
 
 class InternalClient implements Client {
   private static readonly PING_PERIOD = 45;
@@ -128,6 +129,24 @@ class InternalClientManager implements ClientManager {
     return client_id;
   };
 
+  pair = (pin: string): string => {
+    this.ensureStarted();
+    if (!pairingStore.matches(pin)) {
+      throw new InvalidPairingPinError();
+    }
+    return this.register();
+  };
+
+  pairingPin = (): string => {
+    this.ensureStarted();
+    return pairingStore.read();
+  };
+
+  rotatePairingPin = (): string => {
+    this.ensureStarted();
+    return pairingStore.rotate();
+  };
+
   get = (client_id: string): Client => {
     this.ensureStarted();
     const client = this.clients.get(client_id);
@@ -146,6 +165,7 @@ class InternalClientManager implements ClientManager {
   start = (): Promise<void> => {
     if (!this.isStarted) {
       this.isStarted = true;
+      pairingStore.loadOrCreate();
       return zoneManager.start();
     } else {
       return Promise.resolve();
