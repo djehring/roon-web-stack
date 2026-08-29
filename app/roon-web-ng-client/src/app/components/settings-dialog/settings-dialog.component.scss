@@ -52,6 +52,11 @@
         display: flex;
         flex-direction: column;
       }
+      .pairing-pin {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.2em;
+        margin-right: 10px;
+      }
     }
   }
   .settings.actions {

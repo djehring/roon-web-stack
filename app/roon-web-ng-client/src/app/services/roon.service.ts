@@ -432,6 +432,14 @@ export class RoonService {
     return this._version;
   };
 
+  pairingPin = async (): Promise<string> => {
+    return this.fetchPairingPin("GET");
+  };
+
+  rotatePairingPin = async (): Promise<string> => {
+    return this.fetchPairingPin("POST");
+  };
+
   registerOutputCallback: (callback: OutputCallback) => void = (callback: OutputCallback) => {
     this._outputCallback = callback;
   };
@@ -1016,4 +1024,26 @@ export class RoonService {
   private nextWorkerApiRequestId() {
     return this._workerApiRequestId++;
   }
+
+  private fetchPairingPin = async (method: "GET" | "POST"): Promise<string> => {
+    const response = await fetch("/api/pairing", { method });
+    if (!response.ok) {
+      throw new Error("unable to load pairing pin");
+    }
+    const body: unknown = await response.json();
+    if (!isPairingBody(body)) {
+      throw new Error("unable to load pairing pin");
+    }
+    return body.pin;
+  };
 }
+
+const isPairingBody = (value: unknown): value is { pin: string } => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("pin" in value)) {
+    return false;
+  }
+  return typeof value.pin === "string";
+};

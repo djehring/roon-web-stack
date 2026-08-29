@@ -124,6 +124,18 @@ mkcert \
 
 The `docker-compose.yml` mounts `./certs` into `/usr/src/app/config/certs`.
 
+#### Native iPhone app (HTTP, not HTTPS)
+
+The native Roon Remote app pairs over **HTTP** on the LAN, not HTTPS. Browsers
+need HTTPS for the microphone; the iPhone app does not.
+
+- Discover the bridge with Bonjour (`_roon-web-stack._tcp`) on `HTTP_PORT`
+  (or `PORT`, default `3000`).
+- Enter the 6-digit PIN from **Settings** in the web app.
+- `POST /api/pair` with `{ "pin": "123456" }` mints a `client_id`. Wrong PIN
+  returns `403`. The existing `POST /api/register` path is unchanged for the
+  web client.
+
 #### OpenAI (required for AI Music Search)
 
 AI Music Search and voice transcription require `OPENAI_API_KEY` to be set for
@@ -142,6 +154,7 @@ You can change the displayed `zone` with the `zone` selector on the app main scr
 - you can choose the theme used
 - you can choose between two display modes
 - you can select the displayed zone
+- you can show and rotate the native pairing PIN
 
 As features will be added, settings will be added, if needed, to support them.  
 These settings are saved in `localstorage`, so they're both linked to the `host` serving the app and to the browser instance they've been set. Changing one of these parameters will reset all settings to their default value.
