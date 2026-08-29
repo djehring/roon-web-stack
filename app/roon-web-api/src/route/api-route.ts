@@ -212,7 +212,6 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       });
       req.socket.on("close", () => {
         sub.unsubscribe();
-        client.close();
       });
     } else {
       return badRequestReply;
