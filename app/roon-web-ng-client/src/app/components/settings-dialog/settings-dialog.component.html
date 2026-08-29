@@ -32,6 +32,13 @@
             <label for="zone-selector">Displayed zone:</label>
             <nr-zone-selector id="zone-selector" aria-label="Choose a zone to display" yPosition="below" xPosition="after" idSuffix="settings" />
           </div>
+          <div class="setting">
+            <label for="pairing-pin">Native pairing PIN:</label>
+            <span id="pairing-pin" class="pairing-pin">{{ $pairingPin() || "------" }}</span>
+            <button mat-button id="pairing-pin-rotate" (click)="rotatePairingPin()">
+              <mat-icon fontIcon="refresh" />Rotate
+            </button>
+          </div>
         </div>
         <div class="version" [class.small-screen]="$isSmallScreen()" ngxSnContainer>
           <button mat-button id="reload-app" (click)="onReload()"><mat-icon fontIcon="refresh" />Reload app</button>

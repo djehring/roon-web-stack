@@ -1,6 +1,6 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from "@angular/cdk/drag-drop";
 import { CommonModule } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, Signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, Signal, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatOptionModule } from "@angular/material/core";
@@ -81,6 +81,7 @@ export class SettingsDialogComponent implements OnInit {
   private readonly _settingsService: SettingsService;
   private readonly _spatialNavigableService: NgxSpatialNavigableService;
   private readonly _$displayMode: Signal<DisplayMode>;
+  private readonly _roonService: RoonService;
   readonly $actions: Signal<Action[]>;
   readonly $availableActions: Signal<Action[]>;
   readonly $chosenTheme: Signal<Theme>;
@@ -89,6 +90,7 @@ export class SettingsDialogComponent implements OnInit {
   readonly $isSmallScreen: Signal<boolean>;
   readonly $layoutClass: Signal<string>;
   readonly $displayMode: Signal<string>;
+  readonly $pairingPin = signal("");
   readonly displayModes: { id: DisplayMode; label: string }[];
   readonly version: string;
   readonly selectedTab: number;
@@ -101,6 +103,7 @@ export class SettingsDialogComponent implements OnInit {
     this._dialogService = inject(DialogService);
     this._settingsService = inject(SettingsService);
     this._spatialNavigableService = inject(NgxSpatialNavigableService);
+    this._roonService = inject(RoonService);
     effect(() => {
       for (const dmData of Object.values(DisplayModesData)) {
         this._dialogRef.removePanelClass(dmData.class);
@@ -131,11 +134,12 @@ export class SettingsDialogComponent implements OnInit {
     this.$isOneColumn = this._settingsService.isOneColumn();
     this.$layoutClass = this._settingsService.displayModeClass();
     this.selectedTab = data.selectedTab;
-    this.version = inject(RoonService).version();
+    this.version = this._roonService.version();
   }
 
   ngOnInit(): void {
     void this.loadAudioDevices();
+    void this.loadPairingPin();
   }
 
   private async loadAudioDevices(): Promise<void> {
@@ -234,5 +238,23 @@ export class SettingsDialogComponent implements OnInit {
   setMicrophone(deviceId: string): void {
     this.selectedMicrophoneId = deviceId;
     this.onMicrophoneChange();
+  }
+
+  async rotatePairingPin(): Promise<void> {
+    try {
+      const pin = await this._roonService.rotatePairingPin();
+      this.$pairingPin.set(pin);
+    } catch {
+      this.$pairingPin.set("");
+    }
+  }
+
+  private async loadPairingPin(): Promise<void> {
+    try {
+      const pin = await this._roonService.pairingPin();
+      this.$pairingPin.set(pin);
+    } catch {
+      this.$pairingPin.set("");
+    }
   }
 }

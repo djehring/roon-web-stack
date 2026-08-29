@@ -38,6 +38,8 @@ describe("SettingsDialogComponent", () => {
   };
   let roonService: {
     version: jest.Mock;
+    pairingPin: jest.Mock;
+    rotatePairingPin: jest.Mock;
   };
   let addPanelClass: jest.Mock;
   let removePanelClass: jest.Mock;
@@ -76,6 +78,8 @@ describe("SettingsDialogComponent", () => {
     version = "version";
     roonService = {
       version: jest.fn().mockImplementation(() => version),
+      pairingPin: jest.fn().mockResolvedValue("482193"),
+      rotatePairingPin: jest.fn().mockResolvedValue("111111"),
     };
     dialogService = {
       open: jest.fn(),
@@ -101,7 +105,13 @@ describe("SettingsDialogComponent", () => {
     fixture.detectChanges();
   });
 
-  it("should create", () => {
+  it("should create, load, and rotate the native pairing PIN", async () => {
     expect(component).toBeTruthy();
+    expect(roonService.pairingPin).toHaveBeenCalled();
+    await Promise.resolve();
+    expect(component.$pairingPin()).toBe("482193");
+    await component.rotatePairingPin();
+    expect(roonService.rotatePairingPin).toHaveBeenCalled();
+    expect(component.$pairingPin()).toBe("111111");
   });
 });
