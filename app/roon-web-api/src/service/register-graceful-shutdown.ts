@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import GracefulServer from "@gquittet/graceful-server";
 import IGracefulServer from "@gquittet/graceful-server/lib/types/interface/gracefulServer";
-import { logger } from "@infrastructure";
+import { logger, mdnsAdvertiser } from "@infrastructure";
 import { clientManager } from "./client-manager";
 
 const registerGracefulShutdown = (server: FastifyInstance): IGracefulServer => {
@@ -13,6 +13,7 @@ const registerGracefulShutdown = (server: FastifyInstance): IGracefulServer => {
   });
   gracefulShutdown.on(GracefulServer.SHUTTING_DOWN, () => {
     logger.debug("roon-web-api shutdown starts");
+    mdnsAdvertiser.stop();
     clientManager.stop();
     logger.info("roon-web-api shutdown complete");
   });

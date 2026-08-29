@@ -3,7 +3,7 @@ import { fastify, type FastifyPluginCallback } from "fastify";
 import * as fs from "fs";
 import * as net from "net";
 import * as process from "process";
-import { buildLoggerOptions, hostInfo, logger } from "@infrastructure";
+import { buildLoggerOptions, hostInfo, logger, mdnsAdvertiser } from "@infrastructure";
 import { clientManager, gracefulShutdownHook, startScheduledTasks, stopScheduledTasks } from "@service";
 import apiRoute from "./route/api-route";
 import appRoute from "./route/app-route";
@@ -97,6 +97,8 @@ const init = async (): Promise<void> => {
   try {
     await httpServer.listen({ host: hostInfo.host, port: httpPort });
     await httpsServer.listen({ host: hostInfo.host, port: httpsPort });
+
+    mdnsAdvertiser.start({ httpPort, httpsPort });
 
     gracefulShutDownHttp.setReady();
     gracefulShutDownHttps.setReady();
