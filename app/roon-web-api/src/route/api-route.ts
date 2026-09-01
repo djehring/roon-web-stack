@@ -18,6 +18,7 @@ import {
   fetchTrackSuggestions,
   isMissingOpenAIKeyError,
   recognizeAlbumFromImage,
+  streamTrackStory,
   transcribeAudio,
 } from "../ai-service/chatgpt";
 import { Track, TrackStory } from "../ai-service/types/track";
@@ -139,10 +140,42 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
         return reply.status(400).send({ error: "Both artist and track must be provided." });
       }
 
+      const wantsStream = (req.headers.accept ?? "").includes("text/event-stream");
+      if (wantsStream) {
+        try {
+          reply.header("x-accel-buffering", "no");
+          for await (const event of streamTrackStory(track)) {
+            reply.sse({
+              event: event.type,
+              data: JSON.stringify(event),
+            });
+          }
+          reply.sseContext.source.end();
+          return await reply;
+        } catch (error: unknown) {
+          if (isMissingOpenAIKeyError(error) && !reply.sent) {
+            return await reply.status(503).send({ error: error.message });
+          }
+          logger.error(error, "Error streaming track story.");
+          if (!reply.sent) {
+            return reply.status(500).send({ error: "Error fetching track story." });
+          }
+          reply.sse({
+            event: "error",
+            data: JSON.stringify({ type: "error", error: "Error fetching track story." }),
+          });
+          reply.sseContext.source.end();
+          return reply;
+        }
+      }
+
       try {
         const story: TrackStory = await fetchTrackStory(track);
         return await reply.status(200).send(story);
-      } catch (error) {
+      } catch (error: unknown) {
+        if (isMissingOpenAIKeyError(error)) {
+          return await reply.status(503).send({ error: error.message });
+        }
         logger.error(error, "Error fetching track story.");
         return reply.status(500).send({ error: "Error fetching track story." });
       }

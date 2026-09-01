@@ -1,4 +1,4 @@
-import { normalizeArtistName, normalizeString } from "./string-utils";
+import { compactTitle, normalizeArtistName, normalizeString, titlesMatchCompact } from "./string-utils";
 
 describe("string-utils", () => {
   describe("normalizeString", () => {
@@ -142,6 +142,14 @@ describe("string-utils", () => {
       expect(normalizeArtistName("The Who")).toBe("who");
       // Should not affect "The" in the middle of a name
       expect(normalizeArtistName("Rage Against The Machine")).toBe("rage against the machine");
+    });
+  });
+
+  describe("titlesMatchCompact", () => {
+    it("treats Mah Na Mah Na and Mahna Mahna as the same title", () => {
+      expect(titlesMatchCompact("Mah Na Mah Na", "Mahna Mahna")).toBe(true);
+      expect(compactTitle("Mah-Na-Mah-Na")).toBe("mahnamahna");
+      expect(titlesMatchCompact("Mah Na Mah Na", "Rainbow Connection")).toBe(false);
     });
   });
 });

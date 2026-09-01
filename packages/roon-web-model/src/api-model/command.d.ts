@@ -25,6 +25,7 @@ export const enum CommandType {
   STOP = "STOP",
   PREVIOUS = "PREVIOUS",
   NEXT = "NEXT",
+  SEEK = "SEEK",
   // volume actions
   VOLUME = "VOLUME",
   VOLUME_GROUPED_ZONE = "VOLUME_GROUPED_ZONE",
@@ -82,6 +83,15 @@ export interface PreviousCommand {
   type: CommandType.PREVIOUS;
   data: {
     zone_id: string;
+  };
+}
+
+export interface SeekCommand {
+  type: CommandType.SEEK;
+  data: {
+    zone_id: string;
+    seconds: number;
+    how?: "absolute" | "relative";
   };
 }
 
@@ -183,6 +193,7 @@ export type InternalCommand = QueueBotCommand;
 
 export type Command =
   | ControlCommand
+  | SeekCommand
   | VolumeCommand
   | VolumeGroupedZoneCommand
   | MuteCommand

@@ -82,6 +82,20 @@ describe("matching-utils", () => {
       expect(result).toEqual(albums.items[0]);
     });
 
+    it("should match a plain artist subtitle without Roon's encoded form", () => {
+      const albums = createAlbumsList([
+        {
+          title: "The Green Album",
+          subtitle: "The Muppets",
+          item_key: "key1",
+        },
+      ]);
+      const track = createTrack("The Muppets: The Green Album", "The Muppets");
+
+      const result = matchAlbumInList(albums, track);
+      expect(result).toEqual(albums.items[0]);
+    });
+
     it("should handle empty or malformed subtitle", () => {
       const albums = createAlbumsList([
         {

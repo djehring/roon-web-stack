@@ -6,6 +6,7 @@ import { muteCommandExecutorMock } from "./command-executor/mute-command-executo
 import { muteGroupedZoneCommandExecutorMock } from "./command-executor/mute-grouped-zone-command-executor.mock";
 import { playFromHereCommandExecutorMock } from "./command-executor/play-from-here-command-executor.mock";
 import { queueBotInternalCommandExecutorMock } from "./command-executor/queue-bot-internal-command-executor.mock";
+import { seekCommandExecutorMock } from "./command-executor/seek-command-executor.mock";
 import { sharedConfigCommandExecutor } from "./command-executor/shared-config-command-executor.mock";
 import { transferZoneCommandExecutorMock } from "./command-executor/transfer-zone-command-executor.mock";
 import { volumeCommandExecutorMock } from "./command-executor/volume-command-executor.mock";

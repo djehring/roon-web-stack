@@ -12,7 +12,7 @@ import { findTrackWithGPT } from "../ai-service/chatgpt";
 import { Track } from "../ai-service/types/track";
 import { matchAlbumInList } from "./matching-utils";
 import { browseIntoLibrary, getLibrarySearchItem, resetBrowseSession, searchForAlbumWithTitle } from "./roon-utils";
-import { normalizeArtistName, normalizeString } from "./string-utils";
+import { compactTitle, normalizeArtistName, normalizeString } from "./string-utils";
 
 interface TrackToPlay {
   title: string;
@@ -79,7 +79,14 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
       logger.debug({ track, startPlay }, "Processing track");
       await resetBrowseSession(browseOptions.multi_session_key, "search");
 
-      // Try album-based search first (our new primary method)
+      // Title search first. Album names from GPT are often longer than the
+      // title Roon filed the record under, so album-first misses the song.
+      const foundByTitle = await findTrackInSearchResults(track, browseOptions, startPlay);
+      if (foundByTitle) {
+        startPlay = false;
+        continue;
+      }
+
       if (track.album && track.album.trim() !== "") {
         logger.debug(`Attempting album-based search for "${track.track}" on album "${track.album}"`);
         const foundTrack = await findTrackByAlbum(track, browseOptions);
@@ -198,12 +205,14 @@ async function performSearch(track: Track, browseOptions: RoonApiBrowseOptions):
   // Remove duplicates from track variations
   const uniqueTrackVariations = [...new Set(trackVariations)];
 
-  // Create search variations in both formats: "Artist - Track" and "Track - Artist"
+  // Title alone first. "The Muppets - Mah Na Mah Na" does not hit the track
+  // in Roon search the way "Mah Na Mah Na" does.
   const searchVariations = [
-    ...uniqueTrackVariations.map((trackVar) => `${track.artist} - ${trackVar}`), // Artist - Track format
-    ...uniqueTrackVariations.map((trackVar) => `${trackVar} - ${track.artist}`), // Track - Artist format
-    // Also include the artist name alone as a fallback
-    track.artist,
+    ...uniqueTrackVariations,
+    ...uniqueTrackVariations.map((trackVar) => `${trackVar} ${track.artist}`),
+    ...uniqueTrackVariations.map((trackVar) => `${track.artist} ${trackVar}`),
+    ...uniqueTrackVariations.map((trackVar) => `${track.artist} - ${trackVar}`),
+    ...uniqueTrackVariations.map((trackVar) => `${trackVar} - ${track.artist}`),
   ];
 
   // Remove duplicates from final search variations
@@ -239,7 +248,7 @@ async function loadSearchResults(client_id?: string): Promise<RoonApiBrowseLoadR
   const searchLoadOptions: RoonApiBrowseLoadOptions = {
     hierarchy: "search",
     offset: 0,
-    count: 5,
+    count: 25,
     multi_session_key: client_id,
   };
   return roon.load(searchLoadOptions);
@@ -595,6 +604,13 @@ function findTrackInAlbumTracks(tracks: Item[], track: Track): Item | undefined 
       logger.debug(`Found match after removing special characters: "${cleanItemTitle}" = "${cleanTrackTitle}"`);
       return item;
     }
+
+    const compactItem = cleanItemTitle.replace(/\s+/g, "");
+    const compactTrack = cleanTrackTitle.replace(/\s+/g, "");
+    if (compactItem && compactItem === compactTrack) {
+      logger.debug(`Found compact title match: "${compactItem}"`);
+      return item;
+    }
   }
 
   return undefined;
@@ -772,7 +788,8 @@ function findExactMatchingTrack(items: Item[], track: Track): Item | undefined {
     );
 
     // For exact matching, we require exact title match or classical music match
-    let titleMatch = normalizedItemTitle === normalizedTrackTitle;
+    let titleMatch =
+      normalizedItemTitle === normalizedTrackTitle || compactTitle(normalizedItemTitle) === compactTitle(normalizedTrackTitle);
 
     // If not a direct match, try classical music matching
     if (!titleMatch) {
@@ -878,7 +895,11 @@ function findMatchingTrack(items: Item[], track: Track): Item | undefined {
     const normalizedTrackTitle = normalizeString(track.track);
 
     // First try exact title match
-    const exactMatch = artistMatches.find((item) => normalizeString(item.title) === normalizedTrackTitle);
+    const exactMatch = artistMatches.find(
+      (item) =>
+        normalizeString(item.title) === normalizedTrackTitle ||
+        compactTitle(item.title) === compactTitle(normalizedTrackTitle)
+    );
 
     if (exactMatch) {
       logger.debug(`Found exact title match: ${exactMatch.title}`);
@@ -1003,7 +1024,7 @@ async function playAlbumTrack(
     // Step 3: Find the appropriate action based on startPlay
     // startPlay true = "Play Now", false = "Queue"
     const actionTitle = startPlay ? "Play Now" : "Queue";
-    const action = actionList.items.find((item) => item.title === actionTitle && item.hint === "action");
+    const action = findPlayAction(actionList.items, startPlay);
     if (!action) {
       throw new Error(`Could not find ${actionTitle} action for track: ${track.title}`);
     }
@@ -1037,6 +1058,11 @@ async function playAlbumTrack(
     logger.error(`Error in playAlbumTrack for ${track.title}:`, error);
     throw error;
   }
+}
+
+function findPlayAction(items: Item[], startPlay: boolean): Item | undefined {
+  const wanted = startPlay ? /play\s*now/i : /^queue$/i;
+  return items.find((item) => item.hint === "action" && wanted.test(item.title));
 }
 
 /**

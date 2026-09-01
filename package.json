@@ -1,6 +1,6 @@
 {
   "name": "@djehring/roon-web-stack",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "a web stack, from api to web client, to use roon in a browser (forked from @nihilux)",
   "private": true,
   "author": "djehring@github.com",

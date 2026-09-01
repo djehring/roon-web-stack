@@ -4,78 +4,58 @@ import { Track } from "../ai-service/types/track";
 import { normalizeArtistName, normalizeString } from "./string-utils";
 
 export function matchAlbumInList(albumsList: { items: Item[] }, track: Track): Item | null {
-  // First, find all albums that match the title
-  const titleMatches = albumsList.items.filter((item) => {
-    const normalizedTitle = normalizeString(item.title);
-    const normalizedAlbum = normalizeString(track.album);
-    return normalizedTitle === normalizedAlbum;
-  });
+  const titleMatches = albumsList.items.filter((item) => titlesMatch(item.title, track.album));
 
   if (titleMatches.length === 0) {
     logger.debug(`FAIL. No matching album title found for: ${track.album}`);
     return null;
   }
 
-  // Check for valid artist format in all title matches
-  const validMatches = titleMatches.filter((item) => {
-    const artistMatches = item.subtitle?.match(/\[\[\d+\|(.*?)\]\]/g) || [];
-    return artistMatches.length > 0; // Only keep items with valid artist format
-  });
+  const withArtists = titleMatches.filter((item) =>
+    albumArtists(item.subtitle).some((artist) => artistsAlign(artist, track.artist))
+  );
 
-  if (validMatches.length === 0) {
-    logger.debug(`FAIL. No valid artist format found for matching albums for: ${track.album}`);
+  if (withArtists.length === 0) {
+    logger.debug(`FAIL. No artist on matching albums for: ${track.album}`);
     return null;
   }
 
-  // If we have multiple valid matches, try to find the best artist match
-  if (validMatches.length > 1) {
-    logger.debug(`Found ${validMatches.length} albums with title "${track.album}". Checking artists...`);
-
-    const normalizedTrackArtist = normalizeArtistName(track.artist);
-
-    // First, try to find an exact artist match
-    const exactArtistMatch = validMatches.find((item) => {
-      const artistMatches = item.subtitle?.match(/\[\[\d+\|(.*?)\]\]/g) || [];
-
-      const artistNames = artistMatches.map((match) => {
-        const artistName = match.match(/\[\[\d+\|(.*?)\]\]/)?.[1] || "";
-        return normalizeArtistName(artistName);
-      });
-
-      // Check for exact artist match
-      return artistNames.some((artist) => artist === normalizedTrackArtist);
-    });
-
-    if (exactArtistMatch) {
-      logger.debug(`Found exact artist match: ${exactArtistMatch.subtitle}`);
-      return exactArtistMatch;
-    }
-
-    // If no exact match, use the flexible matching logic
-    const flexibleArtistMatch = validMatches.find((item) => {
-      const artistMatches = item.subtitle?.match(/\[\[\d+\|(.*?)\]\]/g) || [];
-
-      const artistNames = artistMatches.map((match) => {
-        const artistName = match.match(/\[\[\d+\|(.*?)\]\]/)?.[1] || "";
-        return normalizeArtistName(artistName);
-      });
-
-      // Use flexible matching
-      return artistNames.some(
-        (artist) =>
-          artist.includes(normalizedTrackArtist) ||
-          normalizedTrackArtist.includes(artist) ||
-          artist.replace(/[^\w\s]/g, "") === normalizedTrackArtist.replace(/[^\w\s]/g, "") ||
-          artist.split(/\s+/).some((word) => word.length > 3 && normalizedTrackArtist.includes(word))
-      );
-    });
-
-    if (flexibleArtistMatch) {
-      logger.debug(`Found flexible artist match: ${flexibleArtistMatch.subtitle}`);
-      return flexibleArtistMatch;
-    }
+  if (withArtists.length === 1) {
+    return withArtists[0];
   }
 
-  // If we only have one valid match, return it
-  return validMatches[0];
+  logger.debug(`Found ${withArtists.length} albums with title "${track.album}". Checking artists...`);
+
+  const normalizedTrackArtist = normalizeArtistName(track.artist);
+  const exactArtistMatch = withArtists.find((item) =>
+    albumArtists(item.subtitle).some((artist) => normalizeArtistName(artist) === normalizedTrackArtist)
+  );
+  return exactArtistMatch ?? withArtists[0];
+}
+
+function titlesMatch(itemTitle: string, album: string): boolean {
+  const normalizedTitle = normalizeString(itemTitle);
+  const normalizedAlbum = normalizeString(album);
+  if (!normalizedTitle || !normalizedAlbum) return false;
+  if (normalizedTitle === normalizedAlbum) return true;
+  return normalizedAlbum.endsWith(normalizedTitle) || normalizedTitle.endsWith(normalizedAlbum);
+}
+
+function albumArtists(subtitle?: string): string[] {
+  if (!subtitle?.trim()) return [];
+  const encoded = [...subtitle.matchAll(/\[\[\d+\|(.*?)\]\]/g)].map((match) => match[1]).filter(Boolean);
+  if (encoded.length > 0) return encoded;
+  return [subtitle];
+}
+
+function artistsAlign(albumArtist: string, trackArtist: string): boolean {
+  const album = normalizeArtistName(albumArtist);
+  const track = normalizeArtistName(trackArtist);
+  if (!album || !track) return false;
+  return (
+    album === track ||
+    album.includes(track) ||
+    track.includes(album) ||
+    album.replace(/[^\w\s]/g, "") === track.replace(/[^\w\s]/g, "")
+  );
 }

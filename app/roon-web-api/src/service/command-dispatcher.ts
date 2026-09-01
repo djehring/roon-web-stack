@@ -21,6 +21,7 @@ import { executor as muteExecutor } from "./command-executor/mute-command-execut
 import { executor as muteGroupedZoneExecutor } from "./command-executor/mute-grouped-zone-command-executor";
 import { executor as playFromHereExecutor } from "./command-executor/play-from-here-command-executor";
 import { internalExecutor as queueBotCommandExecutor } from "./command-executor/queue-bot-internal-command-executor";
+import { executor as seekExecutor } from "./command-executor/seek-command-executor";
 import { executor as sharedConfigExecutor } from "./command-executor/shared-config-command-executor";
 import { executor as transferZoneExecutor } from "./command-executor/transfer-zone-command-executor";
 import { executor as volumeExecutor } from "./command-executor/volume-command-executor";
@@ -36,6 +37,9 @@ const dispatch = (command: Command, controlChannel: Subject<CommandState>): stri
     case CommandType.NEXT:
     case CommandType.PREVIOUS:
       executeCommand(command_id, command, findZone(command.data.zone_id), controlExecutor, controlChannel);
+      break;
+    case CommandType.SEEK:
+      executeCommand(command_id, command, findZone(command.data.zone_id), seekExecutor, controlChannel);
       break;
     case CommandType.VOLUME:
       executeCommand(command_id, command, findZone(command.data.zone_id), volumeExecutor, controlChannel);
