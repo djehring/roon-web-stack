@@ -14,6 +14,7 @@ import {
 import { MatExpansionModule } from "@angular/material/expansion";
 import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIcon } from "@angular/material/icon";
+import { MatInputModule } from "@angular/material/input";
 import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
 import { MatSelectModule } from "@angular/material/select";
 import { MatTab, MatTabContent, MatTabGroup } from "@angular/material/tabs";
@@ -67,6 +68,7 @@ import { SettingsService } from "@services/settings.service";
     NgxSpatialNavigableElementDirective,
     MatExpansionModule,
     MatFormFieldModule,
+    MatInputModule,
     MatSelectModule,
     FormsModule,
     MatOptionModule,
@@ -91,6 +93,7 @@ export class SettingsDialogComponent implements OnInit {
   readonly $layoutClass: Signal<string>;
   readonly $displayMode: Signal<string>;
   readonly $pairingPin = signal("");
+  openAIApiKey = "";
   readonly displayModes: { id: DisplayMode; label: string }[];
   readonly version: string;
   readonly selectedTab: number;
@@ -140,6 +143,7 @@ export class SettingsDialogComponent implements OnInit {
   ngOnInit(): void {
     void this.loadAudioDevices();
     void this.loadPairingPin();
+    this.openAIApiKey = this._settingsService.openAIApiKey();
   }
 
   private async loadAudioDevices(): Promise<void> {
@@ -183,7 +187,13 @@ export class SettingsDialogComponent implements OnInit {
   }
 
   onSave() {
+    this.saveOpenAIApiKey();
     this._dialogService.close();
+  }
+
+  saveOpenAIApiKey() {
+    this._settingsService.saveOpenAIApiKey(this.openAIApiKey);
+    this._roonService.setOpenAIApiKey(this.openAIApiKey);
   }
 
   onReload() {

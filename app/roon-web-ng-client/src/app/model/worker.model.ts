@@ -28,6 +28,7 @@ export type WorkerMessageData =
   | WorkerClientRefreshAction
   | WorkerClientStopAction
   | WorkerClientRestartAction
+  | WorkerClientSetOpenAIKeyAction
   | RawWorkerApiRequest;
 
 export interface WorkerMessage<T extends WorkerMessageData> {
@@ -39,6 +40,7 @@ export interface WorkerClientStartAction {
   url: string;
   isDesktop: boolean;
   roonClientId?: string;
+  openAIApiKey?: string;
 }
 
 export interface WorkerClientRefreshAction {
@@ -53,11 +55,17 @@ export interface WorkerClientRestartAction {
   action: "restart-client";
 }
 
+export interface WorkerClientSetOpenAIKeyAction {
+  action: "set-openai-key";
+  openAIApiKey: string;
+}
+
 export type WorkerClientAction =
   | WorkerClientStartAction
   | WorkerClientRefreshAction
   | WorkerClientStopAction
-  | WorkerClientRestartAction;
+  | WorkerClientRestartAction
+  | WorkerClientSetOpenAIKeyAction;
 
 export interface WorkerClientActionMessage extends WorkerMessage<WorkerClientAction> {
   event: "worker-client";

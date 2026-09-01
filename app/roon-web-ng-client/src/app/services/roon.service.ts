@@ -166,6 +166,7 @@ export class RoonService {
     };
     const isDesktop = this._deviceDetectorService.isDesktop() && !this._deviceDetectorService.isTablet();
     const roonClientId = this._settingsService.roonClientId();
+    const openAIApiKey = this._settingsService.openAIApiKey();
     const startMessage: WorkerClientActionMessage = {
       event: "worker-client",
       data: {
@@ -173,6 +174,7 @@ export class RoonService {
         url: this._window.location.href,
         isDesktop,
         roonClientId,
+        openAIApiKey,
       },
     };
     this._worker.postMessage(startMessage);
@@ -430,6 +432,20 @@ export class RoonService {
 
   version: () => string = () => {
     return this._version;
+  };
+
+  setOpenAIApiKey: (key: string) => void = (key) => {
+    if (this._worker === undefined) {
+      return;
+    }
+    const message: WorkerClientActionMessage = {
+      event: "worker-client",
+      data: {
+        action: "set-openai-key",
+        openAIApiKey: key,
+      },
+    };
+    this._worker.postMessage(message);
   };
 
   pairingPin = async (): Promise<string> => {

@@ -2,6 +2,7 @@ import { MockProvider } from "ng-mocks";
 import { signal, WritableSignal } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
+import { provideNoopAnimations } from "@angular/platform-browser/animations";
 import { Action, ChosenTheme, DefaultActions, DisplayMode } from "@model/client";
 import { DialogService } from "@services/dialog.service";
 import { RoonService } from "@services/roon.service";
@@ -30,6 +31,8 @@ describe("SettingsDialogComponent", () => {
     availableActions: jest.Mock;
     displayModeClass: jest.Mock;
     isBigFonts: jest.Mock;
+    openAIApiKey: jest.Mock;
+    saveOpenAIApiKey: jest.Mock;
   };
   let version: string;
   let dialogService: {
@@ -40,6 +43,7 @@ describe("SettingsDialogComponent", () => {
     version: jest.Mock;
     pairingPin: jest.Mock;
     rotatePairingPin: jest.Mock;
+    setOpenAIApiKey: jest.Mock;
   };
   let addPanelClass: jest.Mock;
   let removePanelClass: jest.Mock;
@@ -74,12 +78,15 @@ describe("SettingsDialogComponent", () => {
       availableActions: jest.fn().mockImplementation(() => $availableAction),
       displayModeClass: jest.fn().mockImplementation(() => $layoutClass),
       isBigFonts: jest.fn().mockImplementation(() => $isBigFonts),
+      openAIApiKey: jest.fn().mockReturnValue(""),
+      saveOpenAIApiKey: jest.fn(),
     };
     version = "version";
     roonService = {
       version: jest.fn().mockImplementation(() => version),
       pairingPin: jest.fn().mockResolvedValue("482193"),
       rotatePairingPin: jest.fn().mockResolvedValue("111111"),
+      setOpenAIApiKey: jest.fn(),
     };
     dialogService = {
       open: jest.fn(),
@@ -89,6 +96,7 @@ describe("SettingsDialogComponent", () => {
     removePanelClass = jest.fn();
     TestBed.configureTestingModule({
       providers: [
+        provideNoopAnimations(),
         MockProvider(MAT_DIALOG_DATA, { selectedTab }),
         MockProvider(DialogService, dialogService),
         MockProvider(SettingsService, settingsService),
@@ -113,5 +121,12 @@ describe("SettingsDialogComponent", () => {
     await component.rotatePairingPin();
     expect(roonService.rotatePairingPin).toHaveBeenCalled();
     expect(component.$pairingPin()).toBe("111111");
+  });
+
+  it("saves the OpenAI API key to settings and the worker", () => {
+    component.openAIApiKey = "sk-user";
+    component.saveOpenAIApiKey();
+    expect(settingsService.saveOpenAIApiKey).toHaveBeenCalledWith("sk-user");
+    expect(roonService.setOpenAIApiKey).toHaveBeenCalledWith("sk-user");
   });
 });

@@ -63,6 +63,7 @@ class InternalRoonWebClient implements RoonWebClient {
   private _isClosed: boolean;
   private _mustRefresh: boolean;
   private _pingInterval?: ReturnType<typeof setTimeout>;
+  private _openAIApiKey: string;
 
   constructor(apiHost: URL) {
     this._apiHost = apiHost;
@@ -75,7 +76,22 @@ class InternalRoonWebClient implements RoonWebClient {
     this._sharedConfigListeners = [];
     this._isClosed = true;
     this._mustRefresh = false;
+    this._openAIApiKey = "";
   }
+
+  setOpenAIApiKey: (key: string) => void = (key) => {
+    this._openAIApiKey = key.trim();
+  };
+
+  private openAIHeaders = (base: Record<string, string>): Record<string, string> => {
+    if (this._openAIApiKey === "") {
+      return base;
+    }
+    return {
+      ...base,
+      "x-openai-api-key": this._openAIApiKey,
+    };
+  };
 
   start: (clientId?: string) => Promise<void> = async (clientId) => {
     if (this._isClosed) {
@@ -167,10 +183,10 @@ class InternalRoonWebClient implements RoonWebClient {
     const commandUrl = new URL(`${clientPath}/aisearch`, this._apiHost);
     const req = new Request(commandUrl, {
       method: "POST",
-      headers: {
+      headers: this.openAIHeaders({
         "Accept": "application/json",
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(query),
     });
     const response = await this.fetchRefreshed(req);
@@ -178,7 +194,7 @@ class InternalRoonWebClient implements RoonWebClient {
       const tracks = (await response.json()) as SuggestedTrack[];
       return { items: tracks };
     }
-    throw new Error("unable to send command");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 
   getTrackStory: (track: SuggestedTrack) => Promise<AITrackStoryResponse> = async (
@@ -191,10 +207,10 @@ class InternalRoonWebClient implements RoonWebClient {
 
     const req = new Request(commandUrl, {
       method: "POST",
-      headers: {
+      headers: this.openAIHeaders({
         "Accept": "application/json",
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(track),
     });
 
@@ -204,7 +220,7 @@ class InternalRoonWebClient implements RoonWebClient {
       return { story: trackStory };
     }
 
-    throw new Error("Unable to fetch track story");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 
   playTracks: (zoneId: string, tracks: SuggestedTrack[]) => Promise<AISearchResponse> = async (
@@ -221,10 +237,10 @@ class InternalRoonWebClient implements RoonWebClient {
     };
     const req = new Request(commandUrl, {
       method: "POST",
-      headers: {
+      headers: this.openAIHeaders({
         "Accept": "application/json",
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(payload),
     });
 
@@ -539,10 +555,10 @@ class InternalRoonWebClient implements RoonWebClient {
     const recognizeUrl = new URL(`${clientPath}/recognize-album`, this._apiHost);
     const req = new Request(recognizeUrl, {
       method: "POST",
-      headers: {
+      headers: this.openAIHeaders({
         "Accept": "application/json",
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(request),
     });
     const response = await this.fetchRefreshed(req);
@@ -553,6 +569,16 @@ class InternalRoonWebClient implements RoonWebClient {
       error?: string;
     };
     throw new Error(errorBody.error || "Unable to recognize album");
+  };
+
+  private openAIErrorMessage = async (response: Response): Promise<string> => {
+    const body = (await response.json().catch(() => ({ error: "" }))) as {
+      error?: string;
+    };
+    if (body.error && body.error !== "") {
+      return body.error;
+    }
+    return `request failed (${response.status})`;
   };
 
   private ensureStared: () => string = () => {
@@ -704,6 +730,7 @@ class InternalRoonWebClient implements RoonWebClient {
     const transcribeUrl = new URL(`${clientPath}/transcribe`, this._apiHost);
     const req = new Request(transcribeUrl, {
       method: "POST",
+      headers: this.openAIHeaders({}),
       body: formData,
     });
 
@@ -711,7 +738,7 @@ class InternalRoonWebClient implements RoonWebClient {
     if (response.status === 200) {
       return response.json() as Promise<TranscriptionResponse>;
     }
-    throw new Error("Unable to transcribe audio");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 }
 

@@ -39,6 +39,17 @@
               <mat-icon fontIcon="refresh" />Rotate
             </button>
           </div>
+          <div class="setting openai-key-setting">
+            <label for="openai-api-key">OpenAI API key:</label>
+            <input
+              id="openai-api-key"
+              type="password"
+              autocomplete="off"
+              [(ngModel)]="openAIApiKey"
+              (change)="saveOpenAIApiKey()"
+              placeholder="sk-..."
+            />
+          </div>
         </div>
         <div class="version" [class.small-screen]="$isSmallScreen()" ngxSnContainer>
           <button mat-button id="reload-app" (click)="onReload()"><mat-icon fontIcon="refresh" />Reload app</button>

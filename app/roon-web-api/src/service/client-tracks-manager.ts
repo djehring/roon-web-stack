@@ -789,7 +789,8 @@ function findExactMatchingTrack(items: Item[], track: Track): Item | undefined {
 
     // For exact matching, we require exact title match or classical music match
     let titleMatch =
-      normalizedItemTitle === normalizedTrackTitle || compactTitle(normalizedItemTitle) === compactTitle(normalizedTrackTitle);
+      normalizedItemTitle === normalizedTrackTitle ||
+      compactTitle(normalizedItemTitle) === compactTitle(normalizedTrackTitle);
 
     // If not a direct match, try classical music matching
     if (!titleMatch) {

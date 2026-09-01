@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: app/roon-web-api/Dockerfile
     container_name: roon-web-stack
+    restart: unless-stopped
     ports:
       - "3000:3000"
       - "3443:3443"
@@ -25,8 +26,8 @@ services:
       # TLS certificate SANs for HTTPS (required for browser mic access on LAN IPs)
       # Example: CERT_HOSTS=192.168.0.13,roon-web.local
       CERT_HOSTS: "${CERT_HOSTS:-${NAS_HOST}}"
-      # OpenAI (required for AI Music Search / transcription)
-      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      # Optional operator fallback. Prefer the key in web Settings.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       # Recommended for Docker Desktop on macOS (avoids UDP discovery issues)
       ROON_CORE_HOST: "${ROON_CORE_HOST}"
       ROON_CORE_PORT: "${ROON_CORE_PORT:-9330}"

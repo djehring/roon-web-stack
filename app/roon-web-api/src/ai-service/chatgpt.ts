@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { OpenAI } from "openai";
 import path from "path";
 import { logger } from "@infrastructure";
@@ -7,35 +8,43 @@ import { attachUKTourSection, fetchUKTourDates, getUKChartData, isUKChartQuery, 
 import { Track, TrackStory } from "./types/track";
 
 const CACHE_DIR = path.join(process.cwd(), "cache", "track-stories");
+const MISSING_KEY_MESSAGE = "OpenAI API key is missing. Add yours in Settings.";
 
-let openai: OpenAI | null = null;
+const openAIKeyContext = new AsyncLocalStorage<string>();
 
 class MissingOpenAIKeyError extends Error {
   public constructor() {
-    super("OPENAI_API_KEY is missing or empty");
+    super(MISSING_KEY_MESSAGE);
     this.name = "MissingOpenAIKeyError";
   }
 }
 
-function assertOpenAIKey(): string {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || key.trim() === "") {
+export const runWithOpenAIKey = <T>(key: string | undefined, fn: () => T): T => {
+  const trimmed = key?.trim();
+  if (trimmed) {
+    return openAIKeyContext.run(trimmed, fn);
+  }
+  return fn();
+};
+
+export const resolveOpenAIApiKey = (): string => {
+  const fromRequest = openAIKeyContext.getStore();
+  const key = fromRequest ?? process.env.OPENAI_API_KEY ?? "";
+  const trimmed = key.trim();
+  if (trimmed === "") {
     throw new MissingOpenAIKeyError();
   }
-  return key;
-}
+  return trimmed;
+};
 
 export function isMissingOpenAIKeyError(err: unknown): err is MissingOpenAIKeyError {
   return err instanceof MissingOpenAIKeyError;
 }
 
 function getOpenAIInstance(): OpenAI {
-  if (!openai) {
-    openai = new OpenAI({
-      apiKey: assertOpenAIKey(),
-    });
-  }
-  return openai;
+  return new OpenAI({
+    apiKey: resolveOpenAIApiKey(),
+  });
 }
 
 function parseTrack(line: string): Track | null {
@@ -946,6 +955,9 @@ CRITICAL INSTRUCTIONS:
 
     return result;
   } catch (error) {
+    if (isMissingOpenAIKeyError(error)) {
+      throw error;
+    }
     logger.error("Error recognizing album from image:", error);
     return {
       albumTitle: "Unknown",

@@ -3,81 +3,33 @@
 This is a fork of [@nihilux/roon-web-stack](https://github.com/nihilux-org/roon-web-stack).
 Original work by [@nihilux](https://github.com/nihilux-org).
 
-[![CI](https://github.com/nihilux-org/roon-web-stack/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nihilux-org/roon-web-stack/actions/workflows/ci.yml)
-[![CD](https://github.com/nihilux-org/roon-web-stack/actions/workflows/cd.yml/badge.svg)](https://github.com/nihilux-org/roon-web-stack/actions/workflows/cd.yml)
+[![CI](https://github.com/djehring/roon-web-stack/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/djehring/roon-web-stack/actions/workflows/ci.yml)
+[![CD](https://github.com/djehring/roon-web-stack/actions/workflows/cd.yml/badge.svg)](https://github.com/djehring/roon-web-stack/actions/workflows/cd.yml)
 
 An ensemble of tools to drive `roon`, from a web browser.
 
 <img style="max-width: 800px;" alt="Application first launch, without extension being enabled in roon settings" src="./doc/images/main-screen.png">
 
-The final produced artifact is a [`docker` image](https://hub.docker.com/repository/docker/nihiluxorg/roon-web-stack/general) containing a `node` application serving both an `Angular` app and a `node` [CQRS](https://martinfowler.com/bliki/CQRS.html) http proxy fronting the [node roon api](https://github.com/RoonLabs/node-roon-api).
+The artifact is a [`docker` image](https://hub.docker.com/r/djehring/roon-web-stack) that serves an `Angular` app and a `node` [CQRS](https://martinfowler.com/bliki/CQRS.html) HTTP proxy in front of the [node roon api](https://github.com/RoonLabs/node-roon-api). It is a sidecar next to an existing Roon Core, not a replacement for Nucleus, ROCK, or `ghcr.io/roonlabs/roon`.
 
 ## How to use it
 
-### Using roon-extension-manager
+How to run the image, pick a topology, and pair phones is in
+[doc/deploy.md](./doc/deploy.md):
 
-Thanks to [The Appgineer](https://github.com/TheAppgineer), this app is available in [roon extension manager](https://github.com/TheAppgineer/roon-extension-manager/wiki) starting with version `1.0.16` of the repository:
+- **A.** Sibling of Roon Docker on the same NAS or Linux host
+- **B.** Sidecar Pi (or any always-on Linux box) next to Nucleus / ROCK
+- **C.** Extension Manager for stock upstream nihilux. This fork is the
+  Docker image until it is packaged for Extension Manager.
 
-<img style="width: 600px;" alt="roon-extension-manager settings" src="./doc/images/roon-extension-manager.png">
+Household installs use [`docker-compose.host.yml`](./docker-compose.host.yml)
+(`djehring/roon-web-stack:latest`, host network, HTTP on port `3000`).
+Docker Desktop is the exception: see [deploy.md](./doc/deploy.md#docker-desktop-exception-not-household)
+and [`docker-compose.yml`](./docker-compose.yml). `ROON_CORE_HOST` is
+required there. Host networking and multicast do not work. Try Core ports
+`9330-9339` if pairing fails. Phones often need a typed `host:port`.
 
-This is the easiest way to use it.  
-You can find more info about this tool [on roon forum](https://community.roonlabs.com/t/roon-extension-manager-1-x-currently-at-v1-1-2/161624) or [in its GitHub project](https://github.com/TheAppgineer/roon-extension-manager/wiki).  
-Once again, big thanks to [The Appgineer](https://github.com/TheAppgineer), both for the [roon extension manager](https://github.com/TheAppgineer/roon-extension-manager/wiki) and for the integration in the repository.
-
-### Using docker
-
-How to use the `docker` image [available on `docker hub`](https://hub.docker.com/repository/docker/nihiluxorg/roon-web-stack/general):  
-```bash
-docker run \
--d \
---network host \
---name roon-web-stack \
--e PORT=8282 \
--e LOG_LEVEL=info
--v {somewhere_on_your_host}/config:/usr/src/app/config
-nihiluxorg/roon-web-stack
-```
-- The `network host` setting is needed to enable autodiscovery of your `roon` server.  
-It should be possible to make this requirement optional by providing explicit information about the `roon` server to connect with.  
-This will be explored later, so for now, this is mandatory.   
-- You can configure the `port` used by `node` with the `-e PORT={port_number}` env variable definition.  
-If you don't specify a `port`, the `node` default, `3000` will be used.
-- You can configure the `log` level used by the `node` app via the `-e LOG_LEVEL={level}` env variable definition.  
-Supported values are one of `trace|debug|info|warn|error`.  
-If you don't set this variable, `info` will be used. 
-- The volume mounted by `-v {somewhere_on_your_host}/config:/usr/src/app/config` is here to save the `config.json` file used by the `roon` extension.  
-The corresponding `path` is declared as a `volume` in the [Dockerfile](./app/roon-web-api/Dockerfile) and a `symlink` is present to make the `config.json` file accessible to the `node` app.  
-This directory must be readable and writable by the user inside the `docker`.
-
-**disclaimer:**  
-*There's a bug somewhere between `node lts-alpine` images, `qemu`, `buildx` and `github actions` that breaks them for `armv7` (32 bits `ARM`, like Raspberry Pi 2 and older).  
-I want neither to add a dedicated pipeline for this architecture as a workaround, nor I want to use `debian` as base image, because it's hundred of `MB` larger.  
-Waiting for this bug to be resolved, this platform is not supported (see [this issue](https://github.com/nodejs/docker-node/issues/1798) and this [repo that reproduces this bug](https://github.com/felddy/npm-hang-test)).*
-
-### Using docker-compose
-
-Another way to ease all that has been described above is to go with `docker-compose` (or any equivalent solution to lightly orchestrate containers).  
-Here is an exemple of a `docker-compose.yaml` (that I use on `dietpi` to run this app at home):
-
-```yaml
-version: '3.8'
-services:
-  roon-web-stack:
-    image: nihiluxorg/roon-web-stack
-    container_name: roon-web-stack
-    network_mode: host
-    volumes:
-      - config:/usr/src/app/config
-    environment:
-      - "PORT=8282"
-      - "LOG_LEVEL=info"
-volumes:
-  config:
-```
-
-In this exemple, the `config` volume is created and reused by `docker-compose` without any need to map it to your `host` filesystem.
-
-Once again, there are many ways to achieve this kind of configuration. These exemples are just here to provide indication on what's needed for this [`docker` image](https://hub.docker.com/repository/docker/nihiluxorg/roon-web-stack/general) to work.
+32-bit ARM is not supported.
 
 ### In the browser
 
@@ -136,11 +88,14 @@ need HTTPS for the microphone; the iPhone app does not.
   returns `403`. The existing `POST /api/register` path is unchanged for the
   web client.
 
-#### OpenAI (required for AI Music Search)
+#### OpenAI (AI Music Search)
 
-AI Music Search and voice transcription require `OPENAI_API_KEY` to be set for
-the backend container. If it isn't set, the API returns `503` with a clear
-error and the UI will show an error message.
+Paste your own OpenAI API key in **Settings**. It stays in this browser
+(or on the phone) and is sent only with Search, Story, voice, and cover
+recognition requests. The container does not need `OPENAI_API_KEY`.
+
+If neither the Settings key nor an optional `OPENAI_API_KEY` env is set,
+those routes return `503` and the UI says so.
 
 <img style="max-width: 800px;" alt="Selecting a zone at first app launch" src="./doc/images/selecting-zone-at-first-launch.gif">
 
@@ -155,6 +110,7 @@ You can change the displayed `zone` with the `zone` selector on the app main scr
 - you can choose between two display modes
 - you can select the displayed zone
 - you can show and rotate the native pairing PIN
+- you can paste your OpenAI API key for Search, Story, and voice
 
 As features will be added, settings will be added, if needed, to support them.  
 These settings are saved in `localstorage`, so they're both linked to the `host` serving the app and to the browser instance they've been set. Changing one of these parameters will reset all settings to their default value.
@@ -208,37 +164,19 @@ yarn build      #build every workspace in their dependency order, run lint durin
 yarn test       #test every workspace in their dependency order
 ```
 
-The angular dev server is configured to proxy calls to the api on the `node` default port, so everything should be ready for you to `code`.
+The Angular dev server proxies API calls to the Node default port.
 
-If you want to build locally the `docker` image, you'll have to manually copy the built `Angular` app in the build folder of the `api`, then run `docker build`:
-```bash
-yarn build
-cp -r ./app/roon-web-ng-client/dist/roon-web-ng-client/browser ./app/roon-web-api/bin/web
-docker build -t nihiluxorg/roon-web-stack:latest -f app/roon-web-api/Dockerfile .
-```
-Then you can use the `docker` command already mentioned to launch your freshly built image.
-
-#### Docker Desktop on macOS
-
-Docker Desktop on macOS does not support `--network host` and multicast UDP
-discovery from containers can be unreliable. To run the stack on macOS, set
-`ROON_CORE_HOST` (and optionally `ROON_CORE_PORT`, default `9330`) so the backend
-can connect directly to your Roon Core.
-
-This repo includes a ready-to-use compose file ([docker-compose.yml](./docker-compose.yml)):
+To build the Docker image locally:
 
 ```bash
-# example
-export ROON_CORE_HOST=192.168.0.14
-docker compose up --build
+docker build -t djehring/roon-web-stack:latest \
+  -f app/roon-web-api/Dockerfile .
 ```
 
-Then open one of:
-- `http://localhost:3000/` (HTTP)
-- `https://localhost:3443/` (HTTPS, self-signed)
-
-If you're using an iPhone home-screen shortcut and want it to keep working on
-port `4200`, see **Docker ports** below.
+The image rebuilds the monorepo inside the builder stage. For Docker Desktop
+on macOS or Windows, see [deploy.md](./doc/deploy.md#docker-desktop-exception-not-household):
+host networking and multicast do not work, so `ROON_CORE_HOST` is required.
+Try Core ports `9330-9339` if pairing fails.
 
 ## Docker architecture (this repo)
 
@@ -274,12 +212,12 @@ This repository builds **one container** that serves:
 
 ### Roon Core discovery vs direct connect
 
-On Linux with `--network host`, UDP discovery typically works.
+On Linux with host network, UDP discovery typically works. Leave
+`ROON_CORE_HOST` unset unless it fails. Details are in
+[doc/deploy.md](./doc/deploy.md#networking).
 
-On Docker Desktop (macOS), UDP discovery can be unreliable, so the stack supports
-**direct connect**:
-- Set `ROON_CORE_HOST=<ip-or-hostname>`
-- Optionally set `ROON_CORE_PORT=<port>` (default `9330`)
+On Docker Desktop, set `ROON_CORE_HOST` and optionally `ROON_CORE_PORT`
+(default `9330`, try `9330-9339` if pairing fails).
 
 ### Docker image build flow (multi-stage)
 
@@ -310,22 +248,12 @@ Practical URLs:
 
 ### Start on boot
 
-#### Docker Desktop on macOS
+Docker Desktop: enable **Start Docker Desktop when you log in**.
+[`docker-compose.yml`](./docker-compose.yml) already has
+`restart: unless-stopped`.
 
-- Enable **Docker Desktop → Settings → General → "Start Docker Desktop when you log in"**.
-- In [`docker-compose.yml`](./docker-compose.yml), add `restart: unless-stopped`
-  to the service (recommended) so containers come back after reboot.
-- Then:
-
-```bash
-docker compose up -d
-```
-
-#### Linux / systemd (example)
-
-If you run this on a Linux host, you can use:
-- `restart: unless-stopped` in compose, and/or
-- a systemd unit that runs `docker compose up -d` at boot.
+Linux / NAS / Pi: use [`docker-compose.host.yml`](./docker-compose.host.yml)
+(`restart: unless-stopped` is already set). See [doc/deploy.md](./doc/deploy.md).
 
 ### Troubleshooting: “frontend loads but backend isn’t running”
 

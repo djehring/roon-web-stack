@@ -58,6 +58,15 @@
         margin-right: 10px;
       }
     }
+    .openai-key-setting input {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 8px;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+    }
   }
   .settings.actions {
     height: 100%;

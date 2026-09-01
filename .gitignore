@@ -13,6 +13,9 @@ config.json
 .idea/.gitignore
 .*
 !.dockerignore
+!.github/
+!.github/**
+!.env.example
 .env
 /app/roon-web-api/cache
 /app/roon-web-api/data
