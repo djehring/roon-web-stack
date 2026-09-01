@@ -3,7 +3,7 @@ import { OpenAI } from "openai";
 import path from "path";
 import { logger } from "@infrastructure";
 import { AlbumRecognition } from "@model";
-import { getUKChartData, isUKChartQuery } from "@service";
+import { attachUKTourSection, fetchUKTourDates, getUKChartData, isUKChartQuery, stripUKTourSection } from "@service";
 import { Track, TrackStory } from "./types/track";
 
 const CACHE_DIR = path.join(process.cwd(), "cache", "track-stories");
@@ -597,32 +597,65 @@ export async function fetchTrackSuggestions(query: string): Promise<Track[]> {
   }
 }
 
+const TRACK_STORY_MODEL = "gpt-5-mini";
+
+const TRACK_STORY_SYSTEM_PROMPT = `You are a music historian and expert. Write a structured story about a song for a mobile UI.
+Include these markdown headings, keeping each section concise (a short paragraph or two):
+- **Story Behind the Song:** significance and themes
+- **The Narrative:** lyrics, inspiration, storyline
+- **Themes:** what the song explores
+- **Recording Details:** album, release, studio, producer, key musicians
+- **Musical Style:** genre, instrumentation, sound
+- **Reception and Legacy:** reception, charts, awards, cultural impact
+- **Upcoming in the UK:** forthcoming concerts in the United Kingdom. The app looks these up and appends this heading only when confirmed dates exist. Do not write this heading yourself. Never invent concert dates. Never mention that there are no dates or that the artist has died. Deceased or inactive artists must not get this section.
+Use markdown only. Do not wrap the whole reply in a code fence.`;
+
+function trackStoryCacheKey(track: Track): string {
+  return `${track.artist}-${track.track}-${track.album}`.replace(/[^a-z0-9]/gi, "_");
+}
+
+function trackStoryCachePath(track: Track): string {
+  return path.join(CACHE_DIR, `${trackStoryCacheKey(track)}.json`);
+}
+
+function trackStoryMessages(track: Track): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const albumPart = track.album ? ` from the album "${track.album}"` : "";
+  return [
+    { role: "system", content: TRACK_STORY_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `Tell me about the song "${track.track}" by ${track.artist}${albumPart}. Confirmed forthcoming UK concerts will be attached by the app when any exist. Do not write an Upcoming in the UK heading yourself.`,
+    },
+  ];
+}
+
+async function readCachedTrackStory(track: Track): Promise<TrackStory | null> {
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    const cached = await fs.readFile(trackStoryCachePath(track), "utf-8");
+    const parsedCache = JSON.parse(cached) as TrackStory;
+    if (!parsedCache.title || !parsedCache.content) {
+      return null;
+    }
+    return parsedCache;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedTrackStory(track: Track, story: TrackStory): Promise<void> {
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+  await fs.writeFile(trackStoryCachePath(track), JSON.stringify(story));
+}
+
 async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
   const openaiInstance = getOpenAIInstance();
   const response = await openaiInstance.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content: `You are a music historian and expert. Provide detailed and structured stories about songs.
-                  Include the following sections with headings:
-                  - **Story Behind the Song:** A brief introduction summarizing the significance and themes of the song.
-                  - **The Narrative:** Describe the key elements of the song's lyrics, including inspiration and storyline. Break it into subsections, if applicable.
-                  - **Themes:** Explain the universal or specific themes the song explores.
-                  - **Recording Details:** Include album name, release date, studio location, producer, and key contributing musicians. Highlight their contributions.
-                  - **Musical Style:** Provide details about the song's musical characteristics, genre influences, and instrumentation.
-                  - **Reception and Legacy:** Summarize the song's critical reception, chart performance, awards, and cultural impact.
-
-                  Ensure the response is rich in detail, well-structured, and formatted for direct use in a UI.`,
-      },
-      {
-        role: "user",
-        content: `Tell me about the song "${track.track}" by ${track.artist} from the album "${track.album}".`,
-      },
-    ],
-    max_tokens: 4000,
-    temperature: 0.7,
-    top_p: 1,
+    model: TRACK_STORY_MODEL,
+    messages: trackStoryMessages(track),
+    max_completion_tokens: 2500,
+    // gpt-5-mini accepts "minimal"; openai 4.77 types only list low/medium/high.
+    reasoning_effort: "minimal" as never,
   });
 
   const storyContent = response.choices[0].message.content;
@@ -636,23 +669,72 @@ async function fetchFromOpenAI(track: Track): Promise<TrackStory> {
   };
 }
 
-export async function fetchTrackStory(track: Track): Promise<TrackStory> {
-  const cacheKey = `${track.artist}-${track.track}-${track.album}`.replace(/[^a-z0-9]/gi, "_");
-  const cacheFile = path.join(CACHE_DIR, `${cacheKey}.json`);
+export type TrackStoryStreamEvent =
+  | { type: "meta"; title: string; cached: boolean }
+  | { type: "delta"; content: string }
+  | { type: "done" };
 
-  try {
-    await fs.mkdir(CACHE_DIR, { recursive: true });
-    const cached = await fs.readFile(cacheFile, "utf-8");
-    const parsedCache = JSON.parse(cached) as TrackStory;
-    if (!parsedCache.title || !parsedCache.content) {
-      throw new Error("Invalid cache data");
-    }
-    return parsedCache;
-  } catch {
-    const story = await fetchFromOpenAI(track);
-    await fs.writeFile(cacheFile, JSON.stringify(story));
-    return story;
+export async function* streamTrackStory(track: Track): AsyncGenerator<TrackStoryStreamEvent> {
+  const datesPromise = fetchUKTourDates(track.artist);
+  const cached = await readCachedTrackStory(track);
+  if (cached) {
+    const content = attachUKTourSection(cached.content, await datesPromise);
+    yield { type: "meta", title: cached.title, cached: true };
+    yield { type: "delta", content };
+    yield { type: "done" };
+    return;
   }
+
+  const openaiInstance = getOpenAIInstance();
+  yield { type: "meta", title: track.track, cached: false };
+
+  const stream = await openaiInstance.chat.completions.create({
+    model: TRACK_STORY_MODEL,
+    messages: trackStoryMessages(track),
+    max_completion_tokens: 2500,
+    stream: true,
+    // Prefer fast first tokens for mobile reading.
+    reasoning_effort: "minimal" as never,
+  });
+
+  let full = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (!delta) {
+      continue;
+    }
+    full += delta;
+    yield { type: "delta", content: delta };
+  }
+
+  const content = full.trim();
+  if (!content) {
+    throw new Error("No content returned from OpenAI");
+  }
+
+  const stripped = stripUKTourSection(content);
+  await writeCachedTrackStory(track, { title: track.track, content: stripped });
+  const attached = attachUKTourSection(stripped, await datesPromise);
+  if (attached !== stripped) {
+    yield { type: "delta", content: attached.slice(stripped.length) };
+  }
+  yield { type: "done" };
+}
+
+export async function fetchTrackStory(track: Track): Promise<TrackStory> {
+  const datesPromise = fetchUKTourDates(track.artist);
+  const cached = await readCachedTrackStory(track);
+  const story = cached ?? (await fetchFromOpenAI(track));
+  if (!cached) {
+    await writeCachedTrackStory(track, {
+      title: story.title,
+      content: stripUKTourSection(story.content),
+    });
+  }
+  return {
+    title: story.title,
+    content: attachUKTourSection(story.content, await datesPromise),
+  };
 }
 
 export async function transcribeAudio(audioFile: Buffer): Promise<string> {

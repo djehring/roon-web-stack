@@ -26,6 +26,10 @@
     white-space: pre-line;
   }
 
+  a {
+    color: var(--accent-color);
+  }
+
   mat-spinner {
     margin: 2rem auto;
   }

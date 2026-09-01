@@ -1,5 +1,17 @@
 import { logger } from "@infrastructure";
 
+export function compactTitle(str: string): string {
+  return normalizeString(str).replace(/\s+/g, "");
+}
+
+export function titlesMatchCompact(a: string, b: string): boolean {
+  const left = normalizeString(a);
+  const right = normalizeString(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  return compactTitle(left) === compactTitle(right);
+}
+
 export function normalizeString(str: string): string {
   if (!str) return "";
 
