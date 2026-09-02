@@ -216,9 +216,7 @@ describe("GramophoneShareDialogComponent", () => {
         item_key: "key",
         image_key: "img_key_123",
       };
-      expect(component.getAlbumImageUrl(album)).toBe(
-        "/api/image?image_key=img_key_123&scale=fit&width=80&height=80"
-      );
+      expect(component.getAlbumImageUrl(album)).toBe("/api/image?image_key=img_key_123&scale=fit&width=80&height=80");
     });
   });
 });
