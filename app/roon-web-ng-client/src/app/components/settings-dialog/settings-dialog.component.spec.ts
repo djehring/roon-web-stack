@@ -31,8 +31,6 @@ describe("SettingsDialogComponent", () => {
     availableActions: jest.Mock;
     displayModeClass: jest.Mock;
     isBigFonts: jest.Mock;
-    openAIApiKey: jest.Mock;
-    saveOpenAIApiKey: jest.Mock;
   };
   let version: string;
   let dialogService: {
@@ -43,7 +41,8 @@ describe("SettingsDialogComponent", () => {
     version: jest.Mock;
     pairingPin: jest.Mock;
     rotatePairingPin: jest.Mock;
-    setOpenAIApiKey: jest.Mock;
+    openAIApiKey: jest.Mock;
+    saveOpenAIApiKey: jest.Mock;
   };
   let addPanelClass: jest.Mock;
   let removePanelClass: jest.Mock;
@@ -78,15 +77,14 @@ describe("SettingsDialogComponent", () => {
       availableActions: jest.fn().mockImplementation(() => $availableAction),
       displayModeClass: jest.fn().mockImplementation(() => $layoutClass),
       isBigFonts: jest.fn().mockImplementation(() => $isBigFonts),
-      openAIApiKey: jest.fn().mockReturnValue(""),
-      saveOpenAIApiKey: jest.fn(),
     };
     version = "version";
     roonService = {
       version: jest.fn().mockImplementation(() => version),
       pairingPin: jest.fn().mockResolvedValue("482193"),
       rotatePairingPin: jest.fn().mockResolvedValue("111111"),
-      setOpenAIApiKey: jest.fn(),
+      openAIApiKey: jest.fn().mockResolvedValue(""),
+      saveOpenAIApiKey: jest.fn().mockResolvedValue(undefined),
     };
     dialogService = {
       open: jest.fn(),
@@ -123,10 +121,9 @@ describe("SettingsDialogComponent", () => {
     expect(component.$pairingPin()).toBe("111111");
   });
 
-  it("saves the OpenAI API key to settings and the worker", () => {
+  it("saves the OpenAI API key on the server", async () => {
     component.openAIApiKey = "sk-user";
-    component.saveOpenAIApiKey();
-    expect(settingsService.saveOpenAIApiKey).toHaveBeenCalledWith("sk-user");
-    expect(roonService.setOpenAIApiKey).toHaveBeenCalledWith("sk-user");
+    await component.saveOpenAIApiKey();
+    expect(roonService.saveOpenAIApiKey).toHaveBeenCalledWith("sk-user");
   });
 });

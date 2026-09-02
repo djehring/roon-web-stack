@@ -19,7 +19,7 @@ services:
       # Set only if discovery fails:
       # ROON_CORE_HOST: "${ROON_CORE_HOST}"
       # ROON_CORE_PORT: "${ROON_CORE_PORT:-9330}"
-      # Optional operator fallback. Prefer the key in web Settings.
+      # Optional operator fallback. Prefer pasting the key once in web Settings.
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       CERT_HOSTS: "${CERT_HOSTS:-}"
       # SSL_CERT: "/usr/src/app/config/tls/roon-web-stack.crt"

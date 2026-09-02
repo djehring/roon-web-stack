@@ -90,9 +90,10 @@ need HTTPS for the microphone; the iPhone app does not.
 
 #### OpenAI (AI Music Search)
 
-Paste your own OpenAI API key in **Settings**. It stays in this browser
-(or on the phone) and is sent only with Search, Story, voice, and cover
-recognition requests. The container does not need `OPENAI_API_KEY`.
+Paste your OpenAI API key once in **Settings**. It is stored on the sidecar
+(the same config volume as pairing) and used for Search, Story, voice, and
+cover recognition from every web and native client. The published image
+does not include a key.
 
 If neither the Settings key nor an optional `OPENAI_API_KEY` env is set,
 those routes return `503` and the UI says so.
@@ -110,7 +111,7 @@ You can change the displayed `zone` with the `zone` selector on the app main scr
 - you can choose between two display modes
 - you can select the displayed zone
 - you can show and rotate the native pairing PIN
-- you can paste your OpenAI API key for Search, Story, and voice
+- you can paste an OpenAI API key used by all clients on this stack
 
 As features will be added, settings will be added, if needed, to support them.  
 These settings are saved in `localstorage`, so they're both linked to the `host` serving the app and to the browser instance they've been set. Changing one of these parameters will reset all settings to their default value.

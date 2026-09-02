@@ -80,7 +80,8 @@ Single container serves both frontend (static files) and backend (API):
 - Multi-stage build defined in `app/roon-web-api/Dockerfile`
 - Angular dist copied to `/usr/src/app/web` and served by fastify-static
 - Environment variables: `ROON_CORE_HOST`, `LOG_LEVEL`, `PORT`.
-  OpenAI keys belong in web/native Settings, not on the container.
+  Paste the OpenAI key in web Settings (stored on the config volume).
+  Optional `OPENAI_API_KEY` is an operator fallback only.
 
 ## Code Style Requirements
 

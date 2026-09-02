@@ -1839,49 +1839,6 @@ describe("roon-web-client-factory.ts test suite", () => {
     expect(restartSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("RoonWebClient#getAISearch should send x-openai-api-key when set", async () => {
-    fetchMock
-      .once(mockVersionGet)
-      .once(mockRegisterPost)
-      .once((req: Request) => {
-        const url = new URL(`${client_path}/aisearch`, API_URL).toString();
-        if (req.method === "POST" && req.url === url) {
-          return Promise.resolve({
-            body: JSON.stringify([{ artist: "A", track: "T", album: "L" }]),
-            status: 200,
-          });
-        }
-        return Promise.reject(new Error("error"));
-      });
-    const client = roonWebClientFactory.build(API_URL);
-    await client.start();
-    client.setOpenAIApiKey("  sk-user  ");
-    await client.getAISearch("query");
-    const sentRequest = fetchMock.mock.calls[2][0] as Request;
-    expect(sentRequest.headers.get("x-openai-api-key")).toEqual("sk-user");
-  });
-
-  it("RoonWebClient#getAISearch should omit x-openai-api-key when unset", async () => {
-    fetchMock
-      .once(mockVersionGet)
-      .once(mockRegisterPost)
-      .once((req: Request) => {
-        const url = new URL(`${client_path}/aisearch`, API_URL).toString();
-        if (req.method === "POST" && req.url === url) {
-          return Promise.resolve({
-            body: JSON.stringify([]),
-            status: 200,
-          });
-        }
-        return Promise.reject(new Error("error"));
-      });
-    const client = roonWebClientFactory.build(API_URL);
-    await client.start();
-    await client.getAISearch("query");
-    const sentRequest = fetchMock.mock.calls[2][0] as Request;
-    expect(sentRequest.headers.get("x-openai-api-key")).toBeNull();
-  });
-
   it("RoonWebClient#getAISearch should surface a 503 OpenAI error body", async () => {
     const missing = "OpenAI API key is missing. Add yours in Settings.";
     fetchMock

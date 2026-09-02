@@ -45,7 +45,7 @@ addEventListener("message", (m: MessageEvent<WorkerActionMessage>) => {
 const onClientActionMessage = (clientAction: WorkerClientAction): void => {
   switch (clientAction.action) {
     case "start-client":
-      startClient(clientAction.url, clientAction.isDesktop, clientAction.roonClientId, clientAction.openAIApiKey);
+      startClient(clientAction.url, clientAction.isDesktop, clientAction.roonClientId);
       break;
     case "refresh-client":
       refreshClient();
@@ -53,16 +53,12 @@ const onClientActionMessage = (clientAction: WorkerClientAction): void => {
     case "restart-client":
       restartClient();
       break;
-    case "set-openai-key":
-      setOpenAIApiKey(clientAction.openAIApiKey);
-      break;
   }
 };
 
-const startClient = (url: string, isDesktop: boolean, roonClientId?: string, openAIApiKey?: string): void => {
+const startClient = (url: string, isDesktop: boolean, roonClientId?: string): void => {
   _isDesktop = isDesktop;
   _roonClient = roonWebClientFactory.build(new URL(url));
-  _roonClient.setOpenAIApiKey(openAIApiKey ?? "");
   _roonClient.onClientState((clientState) => {
     const message: ClientStateWorkerEvent = {
       event: "clientState",
@@ -121,10 +117,6 @@ const startClient = (url: string, isDesktop: boolean, roonClientId?: string, ope
       };
       postMessage(message);
     });
-};
-
-const setOpenAIApiKey = (openAIApiKey: string): void => {
-  _roonClient.setOpenAIApiKey(openAIApiKey);
 };
 
 const refreshClient = (): void => {

@@ -52,7 +52,6 @@ export class SettingsService implements OnDestroy {
   private static readonly DISPLAY_MODE_KEY = "nr.DISPLAY_MODE";
   private static readonly ACTIONS_KEY = "nr.ACTIONS";
   private static readonly ROON_CLIENT_ID = "nr.ROON_CLIENT_ID";
-  private static readonly OPENAI_API_KEY = "nr.OPENAI_API_KEY";
   private readonly _breakpointObserver: BreakpointObserver;
   private readonly _customActionsService: CustomActionsService;
   private readonly _renderer: Renderer2;
@@ -269,19 +268,6 @@ export class SettingsService implements OnDestroy {
 
   saveRoonClientId(roonClientId: string) {
     localStorage.setItem(SettingsService.ROON_CLIENT_ID, roonClientId);
-  }
-
-  openAIApiKey(): string {
-    return localStorage.getItem(SettingsService.OPENAI_API_KEY) ?? "";
-  }
-
-  saveOpenAIApiKey(key: string) {
-    const trimmed = key.trim();
-    if (trimmed === "") {
-      localStorage.removeItem(SettingsService.OPENAI_API_KEY);
-      return;
-    }
-    localStorage.setItem(SettingsService.OPENAI_API_KEY, trimmed);
   }
 
   ngOnDestroy() {

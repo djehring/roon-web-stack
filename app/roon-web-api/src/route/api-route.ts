@@ -12,13 +12,12 @@ import {
   RoonImageFormat,
   RoonImageScale,
 } from "@model";
-import { clientManager, InvalidPairingPinError } from "@service";
+import { clientManager, InvalidPairingPinError, openaiKeyStore } from "@service";
 import {
   fetchTrackStory,
   fetchTrackSuggestions,
   isMissingOpenAIKeyError,
   recognizeAlbumFromImage,
-  runWithOpenAIKey,
   streamTrackStory,
   transcribeAudio,
 } from "../ai-service/chatgpt";
@@ -108,6 +107,13 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
   server.post("/pairing", (_req, reply) => {
     return reply.status(200).send({ pin: clientManager.rotatePairingPin() });
   });
+  server.get("/openai-key", (_req, reply) => {
+    return reply.status(200).send({ apiKey: openaiKeyStore.read() });
+  });
+  server.put<{ Body: { apiKey?: string } }>("/openai-key", (req, reply) => {
+    openaiKeyStore.save(req.body.apiKey ?? "");
+    return reply.status(204).send();
+  });
   server.post<{ Params: ClientIdParam }>("/:client_id/unregister", (req, reply) => {
     const client_id = req.params.client_id;
     clientManager.unregister(client_id);
@@ -119,7 +125,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       logger.debug({ client }, "Received AI search request");
       const query = req.body;
       try {
-        const tracks = await runWithOpenAIKey(openAIKeyHeader(req), () => fetchTrackSuggestions(query));
+        const tracks = await fetchTrackSuggestions(query);
         return await reply.status(200).send(tracks);
       } catch (error: unknown) {
         if (isMissingOpenAIKeyError(error)) {
@@ -145,14 +151,12 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       if (wantsStream) {
         try {
           reply.header("x-accel-buffering", "no");
-          await runWithOpenAIKey(openAIKeyHeader(req), async () => {
-            for await (const event of streamTrackStory(track)) {
-              reply.sse({
-                event: event.type,
-                data: JSON.stringify(event),
-              });
-            }
-          });
+          for await (const event of streamTrackStory(track)) {
+            reply.sse({
+              event: event.type,
+              data: JSON.stringify(event),
+            });
+          }
           reply.sseContext.source.end();
           return await reply;
         } catch (error: unknown) {
@@ -173,7 +177,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       }
 
       try {
-        const story: TrackStory = await runWithOpenAIKey(openAIKeyHeader(req), () => fetchTrackStory(track));
+        const story: TrackStory = await fetchTrackStory(track);
         return await reply.status(200).send(story);
       } catch (error: unknown) {
         if (isMissingOpenAIKeyError(error)) {
@@ -190,8 +194,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     const { client, badRequestReply } = getClient(req, reply);
     if (client) {
       const { zoneId, tracks } = req.body;
-      const play = () => client.playTracks(zoneId, tracks);
-      const unfoundTracks = (await runWithOpenAIKey(openAIKeyHeader(req), play)) as Track[];
+      const unfoundTracks = (await client.playTracks(zoneId, tracks)) as Track[];
       return reply.status(200).send(unfoundTracks);
     } else {
       return badRequestReply;
@@ -328,7 +331,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
           return reply.status(400).send({ error: "Expected 'audio' field" });
         }
         const buffer = await parts.toBuffer();
-        const text = await runWithOpenAIKey(openAIKeyHeader(req), () => transcribeAudio(buffer));
+        const text = await transcribeAudio(buffer);
         // eslint-disable-next-line @typescript-eslint/return-await
         return reply.status(200).send({ text });
       } catch (error) {
@@ -471,9 +474,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
 
         if (image && mimeType) {
           // Use OpenAI Vision to recognize the album
-          recognition = await runWithOpenAIKey(openAIKeyHeader(req), () =>
-            recognizeAlbumFromImage(image, mimeType, textHint)
-          );
+          recognition = await recognizeAlbumFromImage(image, mimeType, textHint);
           // Build search query from recognition result
           if (recognition.albumTitle !== "Unknown" && recognition.artistName !== "Unknown") {
             searchQuery = `${recognition.artistName} ${recognition.albumTitle}`;
@@ -516,14 +517,6 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       }
     }
   );
-};
-
-const openAIKeyHeader = (req: FastifyRequest): string | undefined => {
-  const value = req.headers["x-openai-api-key"];
-  if (typeof value === "string" && value.trim() !== "") {
-    return value;
-  }
-  return undefined;
 };
 
 const getClient = (

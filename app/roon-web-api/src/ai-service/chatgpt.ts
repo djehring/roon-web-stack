@@ -1,16 +1,20 @@
 import fs from "fs/promises";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { OpenAI } from "openai";
 import path from "path";
 import { logger } from "@infrastructure";
 import { AlbumRecognition } from "@model";
-import { attachUKTourSection, fetchUKTourDates, getUKChartData, isUKChartQuery, stripUKTourSection } from "@service";
+import {
+  attachUKTourSection,
+  fetchUKTourDates,
+  getUKChartData,
+  isUKChartQuery,
+  openaiKeyStore,
+  stripUKTourSection,
+} from "@service";
 import { Track, TrackStory } from "./types/track";
 
 const CACHE_DIR = path.join(process.cwd(), "cache", "track-stories");
 const MISSING_KEY_MESSAGE = "OpenAI API key is missing. Add yours in Settings.";
-
-const openAIKeyContext = new AsyncLocalStorage<string>();
 
 class MissingOpenAIKeyError extends Error {
   public constructor() {
@@ -19,17 +23,9 @@ class MissingOpenAIKeyError extends Error {
   }
 }
 
-export const runWithOpenAIKey = <T>(key: string | undefined, fn: () => T): T => {
-  const trimmed = key?.trim();
-  if (trimmed) {
-    return openAIKeyContext.run(trimmed, fn);
-  }
-  return fn();
-};
-
 export const resolveOpenAIApiKey = (): string => {
-  const fromRequest = openAIKeyContext.getStore();
-  const key = fromRequest ?? process.env.OPENAI_API_KEY ?? "";
+  const stored = openaiKeyStore.read();
+  const key = stored || process.env.OPENAI_API_KEY || "";
   const trimmed = key.trim();
   if (trimmed === "") {
     throw new MissingOpenAIKeyError();

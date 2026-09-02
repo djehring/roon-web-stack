@@ -64,7 +64,6 @@ describe("RoonServiceService", () => {
           action: "start-client",
           url: "http://localhost/",
           isDesktop: true,
-          openAIApiKey: "",
         },
       },
       {
@@ -73,21 +72,6 @@ describe("RoonServiceService", () => {
           id: 0,
           type: "version",
           data: undefined,
-        },
-      },
-    ]);
-  });
-
-  it("#setOpenAIApiKey should post set-openai-key to the worker", async () => {
-    await service.start();
-    roonWorkerMock.clearMessages();
-    service.setOpenAIApiKey("sk-user");
-    expect(roonWorkerMock.messages).toEqual([
-      {
-        event: "worker-client",
-        data: {
-          action: "set-openai-key",
-          openAIApiKey: "sk-user",
         },
       },
     ]);

@@ -1,6 +1,16 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from "@angular/cdk/drag-drop";
 import { CommonModule } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, Signal, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  Signal,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatOptionModule } from "@angular/material/core";
@@ -84,6 +94,7 @@ export class SettingsDialogComponent implements OnInit {
   private readonly _spatialNavigableService: NgxSpatialNavigableService;
   private readonly _$displayMode: Signal<DisplayMode>;
   private readonly _roonService: RoonService;
+  private readonly _cd = inject(ChangeDetectorRef);
   readonly $actions: Signal<Action[]>;
   readonly $availableActions: Signal<Action[]>;
   readonly $chosenTheme: Signal<Theme>;
@@ -143,7 +154,7 @@ export class SettingsDialogComponent implements OnInit {
   ngOnInit(): void {
     void this.loadAudioDevices();
     void this.loadPairingPin();
-    this.openAIApiKey = this._settingsService.openAIApiKey();
+    void this.loadOpenAIApiKey();
   }
 
   private async loadAudioDevices(): Promise<void> {
@@ -187,13 +198,17 @@ export class SettingsDialogComponent implements OnInit {
   }
 
   onSave() {
-    this.saveOpenAIApiKey();
-    this._dialogService.close();
+    void this.saveOpenAIApiKey().then(() => {
+      this._dialogService.close();
+    });
   }
 
-  saveOpenAIApiKey() {
-    this._settingsService.saveOpenAIApiKey(this.openAIApiKey);
-    this._roonService.setOpenAIApiKey(this.openAIApiKey);
+  async saveOpenAIApiKey(): Promise<void> {
+    try {
+      await this._roonService.saveOpenAIApiKey(this.openAIApiKey);
+    } catch {
+      return;
+    }
   }
 
   onReload() {
@@ -266,5 +281,14 @@ export class SettingsDialogComponent implements OnInit {
     } catch {
       this.$pairingPin.set("");
     }
+  }
+
+  private async loadOpenAIApiKey(): Promise<void> {
+    try {
+      this.openAIApiKey = await this._roonService.openAIApiKey();
+    } catch {
+      this.openAIApiKey = "";
+    }
+    this._cd.markForCheck();
   }
 }

@@ -166,7 +166,6 @@ export class RoonService {
     };
     const isDesktop = this._deviceDetectorService.isDesktop() && !this._deviceDetectorService.isTablet();
     const roonClientId = this._settingsService.roonClientId();
-    const openAIApiKey = this._settingsService.openAIApiKey();
     const startMessage: WorkerClientActionMessage = {
       event: "worker-client",
       data: {
@@ -174,7 +173,6 @@ export class RoonService {
         url: this._window.location.href,
         isDesktop,
         roonClientId,
-        openAIApiKey,
       },
     };
     this._worker.postMessage(startMessage);
@@ -434,18 +432,27 @@ export class RoonService {
     return this._version;
   };
 
-  setOpenAIApiKey: (key: string) => void = (key) => {
-    if (this._worker === undefined) {
-      return;
+  openAIApiKey = async (): Promise<string> => {
+    const response = await fetch("/api/openai-key");
+    if (!response.ok) {
+      throw new Error("unable to load OpenAI API key");
     }
-    const message: WorkerClientActionMessage = {
-      event: "worker-client",
-      data: {
-        action: "set-openai-key",
-        openAIApiKey: key,
-      },
-    };
-    this._worker.postMessage(message);
+    const body: unknown = await response.json();
+    if (!isOpenAIKeyBody(body)) {
+      throw new Error("unable to load OpenAI API key");
+    }
+    return body.apiKey;
+  };
+
+  saveOpenAIApiKey = async (apiKey: string): Promise<void> => {
+    const response = await fetch("/api/openai-key", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    });
+    if (!response.ok) {
+      throw new Error("unable to save OpenAI API key");
+    }
   };
 
   pairingPin = async (): Promise<string> => {
@@ -1053,6 +1060,16 @@ export class RoonService {
     return body.pin;
   };
 }
+
+const isOpenAIKeyBody = (value: unknown): value is { apiKey: string } => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("apiKey" in value)) {
+    return false;
+  }
+  return typeof value.apiKey === "string";
+};
 
 const isPairingBody = (value: unknown): value is { pin: string } => {
   if (typeof value !== "object" || value === null) {

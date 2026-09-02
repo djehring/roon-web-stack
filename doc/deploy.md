@@ -78,8 +78,9 @@ docker compose -f docker-compose.host.yml up -d
 `restart: unless-stopped`, and a named volume on `/usr/src/app/config`.
 It does not publish `3000:3000`. Host network owns the ports.
 
-Optional: `CERT_HOSTS`, `SSL_CERT`, `SSL_KEY`. Leave `OPENAI_API_KEY`
-unset. Each user pastes their key in web or native Settings.
+Optional: `CERT_HOSTS`, `SSL_CERT`, `SSL_KEY`. Paste the OpenAI key once
+in web Settings. It lives on the config volume. Optional `OPENAI_API_KEY`
+is only a compose fallback.
 
 Then:
 
@@ -179,6 +180,6 @@ Do this once per architecture before telling anyone to pull `latest`.
    works. Phone may need typed `host:port`. That is acceptable.
 4. **Volume wipe.** `docker compose down -v`, start again. Roon asks
    to enable the extension again.
-5. **AI optional.** With no key in Settings and no `OPENAI_API_KEY` on
+5. **AI optional.** With no key in web Settings and no `OPENAI_API_KEY` on
    the container, Search/Story return 503 and the UI says so. After
-   pasting a key in Settings, one search works.
+   pasting a key in web Settings, one search works from web and native.

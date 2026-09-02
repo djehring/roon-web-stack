@@ -1,18 +1,34 @@
-import { isMissingOpenAIKeyError, recognizeAlbumFromImage, resolveOpenAIApiKey, runWithOpenAIKey } from "./chatgpt";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { isMissingOpenAIKeyError, recognizeAlbumFromImage, resolveOpenAIApiKey } from "./chatgpt";
 
 describe("chatgpt OpenAI key resolution", () => {
-  const original = process.env.OPENAI_API_KEY;
+  const originalEnv = process.env.OPENAI_API_KEY;
+  const originalFile = process.env.OPENAI_KEY_FILE;
+  let keyFile: string;
+
+  beforeEach(() => {
+    keyFile = path.join(os.tmpdir(), `roon-openai-resolve-${process.pid}-${Date.now()}.json`);
+    process.env.OPENAI_KEY_FILE = keyFile;
+    delete process.env.OPENAI_API_KEY;
+  });
 
   afterEach(() => {
-    if (original === undefined) {
+    fs.rmSync(keyFile, { force: true });
+    if (originalEnv === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else {
-      process.env.OPENAI_API_KEY = original;
+      process.env.OPENAI_API_KEY = originalEnv;
+    }
+    if (originalFile === undefined) {
+      delete process.env.OPENAI_KEY_FILE;
+    } else {
+      process.env.OPENAI_KEY_FILE = originalFile;
     }
   });
 
-  it("throws when env and request key are empty", () => {
-    delete process.env.OPENAI_API_KEY;
+  it("throws when stored and env keys are empty", () => {
     expect(() => resolveOpenAIApiKey()).toThrow("OpenAI API key is missing. Add yours in Settings.");
     try {
       resolveOpenAIApiKey();
@@ -21,19 +37,18 @@ describe("chatgpt OpenAI key resolution", () => {
     }
   });
 
-  it("falls back to OPENAI_API_KEY when the request has none", () => {
+  it("falls back to OPENAI_API_KEY when none is stored", () => {
     process.env.OPENAI_API_KEY = "env-key";
     expect(resolveOpenAIApiKey()).toBe("env-key");
   });
 
-  it("prefers the request key over env", () => {
+  it("prefers the stored Settings key over env", () => {
     process.env.OPENAI_API_KEY = "env-key";
-    const resolved = runWithOpenAIKey("sk-user", () => resolveOpenAIApiKey());
-    expect(resolved).toBe("sk-user");
+    fs.writeFileSync(keyFile, JSON.stringify({ apiKey: "sk-user" }), "utf8");
+    expect(resolveOpenAIApiKey()).toBe("sk-user");
   });
 
   it("recognizeAlbumFromImage rethrows a missing key", async () => {
-    delete process.env.OPENAI_API_KEY;
     await expect(recognizeAlbumFromImage("x", "image/png")).rejects.toThrow(
       "OpenAI API key is missing. Add yours in Settings."
     );

@@ -26,7 +26,7 @@ services:
       # TLS certificate SANs for HTTPS (required for browser mic access on LAN IPs)
       # Example: CERT_HOSTS=192.168.0.13,roon-web.local
       CERT_HOSTS: "${CERT_HOSTS:-${NAS_HOST}}"
-      # Optional operator fallback. Prefer the key in web Settings.
+      # Optional operator fallback. Prefer pasting the key once in web Settings.
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       # Recommended for Docker Desktop on macOS (avoids UDP discovery issues)
       ROON_CORE_HOST: "${ROON_CORE_HOST}"

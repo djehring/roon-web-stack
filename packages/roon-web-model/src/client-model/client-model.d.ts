@@ -52,7 +52,6 @@ export interface RoonWebClient {
   searchAlbums: (zoneId: string, query: string) => Promise<SearchAlbumsResponse>;
   playItem: (zoneId: string, itemKey: string, actionTitle: string) => Promise<void>;
   recognizeAlbum: (request: AlbumRecognitionRequest) => Promise<AlbumRecognitionResponse>;
-  setOpenAIApiKey: (key: string) => void;
   version: () => string;
 }
 
