@@ -1,0 +1,29 @@
+services:
+  roon-web-stack:
+    image: djehring/roon-web-stack:latest
+    # Uncomment to build from this checkout instead of pulling:
+    # build:
+    #   context: .
+    #   dockerfile: app/roon-web-api/Dockerfile
+    container_name: roon-web-stack
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - roon-web-stack-config:/usr/src/app/config
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      HTTP_PORT: "3000"
+      HTTPS_PORT: "3443"
+      # Optional. Host network should find Core on the LAN.
+      # Set only if discovery fails:
+      # ROON_CORE_HOST: "${ROON_CORE_HOST}"
+      # ROON_CORE_PORT: "${ROON_CORE_PORT:-9330}"
+      # Optional operator fallback. Prefer pasting the key once in web Settings.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      CERT_HOSTS: "${CERT_HOSTS:-}"
+      # SSL_CERT: "/usr/src/app/config/tls/roon-web-stack.crt"
+      # SSL_KEY: "/usr/src/app/config/tls/roon-web-stack.key"
+
+volumes:
+  roon-web-stack-config: {}

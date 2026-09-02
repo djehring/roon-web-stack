@@ -13,8 +13,12 @@ config.json
 .idea/.gitignore
 .*
 !.dockerignore
+!.github/
+!.github/**
+!.env.example
 .env
 /app/roon-web-api/cache
+/app/roon-web-api/config/
 /app/roon-web-api/data
 /roon-backend.tar
 /roon-web-app.tar

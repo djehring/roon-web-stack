@@ -3,39 +3,44 @@ import { OpenAI } from "openai";
 import path from "path";
 import { logger } from "@infrastructure";
 import { AlbumRecognition } from "@model";
-import { attachUKTourSection, fetchUKTourDates, getUKChartData, isUKChartQuery, stripUKTourSection } from "@service";
+import {
+  attachUKTourSection,
+  fetchUKTourDates,
+  getUKChartData,
+  isUKChartQuery,
+  openaiKeyStore,
+  stripUKTourSection,
+} from "@service";
 import { Track, TrackStory } from "./types/track";
 
 const CACHE_DIR = path.join(process.cwd(), "cache", "track-stories");
-
-let openai: OpenAI | null = null;
+const MISSING_KEY_MESSAGE = "OpenAI API key is missing. Add yours in Settings.";
 
 class MissingOpenAIKeyError extends Error {
   public constructor() {
-    super("OPENAI_API_KEY is missing or empty");
+    super(MISSING_KEY_MESSAGE);
     this.name = "MissingOpenAIKeyError";
   }
 }
 
-function assertOpenAIKey(): string {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || key.trim() === "") {
+export const resolveOpenAIApiKey = (): string => {
+  const stored = openaiKeyStore.read();
+  const key = stored || process.env.OPENAI_API_KEY || "";
+  const trimmed = key.trim();
+  if (trimmed === "") {
     throw new MissingOpenAIKeyError();
   }
-  return key;
-}
+  return trimmed;
+};
 
 export function isMissingOpenAIKeyError(err: unknown): err is MissingOpenAIKeyError {
   return err instanceof MissingOpenAIKeyError;
 }
 
 function getOpenAIInstance(): OpenAI {
-  if (!openai) {
-    openai = new OpenAI({
-      apiKey: assertOpenAIKey(),
-    });
-  }
-  return openai;
+  return new OpenAI({
+    apiKey: resolveOpenAIApiKey(),
+  });
 }
 
 function parseTrack(line: string): Track | null {
@@ -946,6 +951,9 @@ CRITICAL INSTRUCTIONS:
 
     return result;
   } catch (error) {
+    if (isMissingOpenAIKeyError(error)) {
+      throw error;
+    }
     logger.error("Error recognizing album from image:", error);
     return {
       albumTitle: "Unknown",

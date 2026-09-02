@@ -432,6 +432,29 @@ export class RoonService {
     return this._version;
   };
 
+  openAIApiKey = async (): Promise<string> => {
+    const response = await fetch("/api/openai-key");
+    if (!response.ok) {
+      throw new Error("unable to load OpenAI API key");
+    }
+    const body: unknown = await response.json();
+    if (!isOpenAIKeyBody(body)) {
+      throw new Error("unable to load OpenAI API key");
+    }
+    return body.apiKey;
+  };
+
+  saveOpenAIApiKey = async (apiKey: string): Promise<void> => {
+    const response = await fetch("/api/openai-key", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    });
+    if (!response.ok) {
+      throw new Error("unable to save OpenAI API key");
+    }
+  };
+
   pairingPin = async (): Promise<string> => {
     return this.fetchPairingPin("GET");
   };
@@ -1037,6 +1060,16 @@ export class RoonService {
     return body.pin;
   };
 }
+
+const isOpenAIKeyBody = (value: unknown): value is { apiKey: string } => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("apiKey" in value)) {
+    return false;
+  }
+  return typeof value.apiKey === "string";
+};
 
 const isPairingBody = (value: unknown): value is { pin: string } => {
   if (typeof value !== "object" || value === null) {

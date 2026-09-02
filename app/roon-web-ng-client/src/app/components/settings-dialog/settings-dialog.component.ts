@@ -1,6 +1,16 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from "@angular/cdk/drag-drop";
 import { CommonModule } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, Signal, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  Signal,
+  signal,
+} from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatOptionModule } from "@angular/material/core";
@@ -14,6 +24,7 @@ import {
 import { MatExpansionModule } from "@angular/material/expansion";
 import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIcon } from "@angular/material/icon";
+import { MatInputModule } from "@angular/material/input";
 import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
 import { MatSelectModule } from "@angular/material/select";
 import { MatTab, MatTabContent, MatTabGroup } from "@angular/material/tabs";
@@ -67,6 +78,7 @@ import { SettingsService } from "@services/settings.service";
     NgxSpatialNavigableElementDirective,
     MatExpansionModule,
     MatFormFieldModule,
+    MatInputModule,
     MatSelectModule,
     FormsModule,
     MatOptionModule,
@@ -82,6 +94,7 @@ export class SettingsDialogComponent implements OnInit {
   private readonly _spatialNavigableService: NgxSpatialNavigableService;
   private readonly _$displayMode: Signal<DisplayMode>;
   private readonly _roonService: RoonService;
+  private readonly _cd = inject(ChangeDetectorRef);
   readonly $actions: Signal<Action[]>;
   readonly $availableActions: Signal<Action[]>;
   readonly $chosenTheme: Signal<Theme>;
@@ -91,6 +104,7 @@ export class SettingsDialogComponent implements OnInit {
   readonly $layoutClass: Signal<string>;
   readonly $displayMode: Signal<string>;
   readonly $pairingPin = signal("");
+  openAIApiKey = "";
   readonly displayModes: { id: DisplayMode; label: string }[];
   readonly version: string;
   readonly selectedTab: number;
@@ -140,6 +154,7 @@ export class SettingsDialogComponent implements OnInit {
   ngOnInit(): void {
     void this.loadAudioDevices();
     void this.loadPairingPin();
+    void this.loadOpenAIApiKey();
   }
 
   private async loadAudioDevices(): Promise<void> {
@@ -183,7 +198,17 @@ export class SettingsDialogComponent implements OnInit {
   }
 
   onSave() {
-    this._dialogService.close();
+    void this.saveOpenAIApiKey().then(() => {
+      this._dialogService.close();
+    });
+  }
+
+  async saveOpenAIApiKey(): Promise<void> {
+    try {
+      await this._roonService.saveOpenAIApiKey(this.openAIApiKey);
+    } catch {
+      return;
+    }
   }
 
   onReload() {
@@ -256,5 +281,14 @@ export class SettingsDialogComponent implements OnInit {
     } catch {
       this.$pairingPin.set("");
     }
+  }
+
+  private async loadOpenAIApiKey(): Promise<void> {
+    try {
+      this.openAIApiKey = await this._roonService.openAIApiKey();
+    } catch {
+      this.openAIApiKey = "";
+    }
+    this._cd.markForCheck();
   }
 }

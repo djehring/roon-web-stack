@@ -2,6 +2,7 @@ import { MockProvider } from "ng-mocks";
 import { signal, WritableSignal } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
+import { provideNoopAnimations } from "@angular/platform-browser/animations";
 import { Action, ChosenTheme, DefaultActions, DisplayMode } from "@model/client";
 import { DialogService } from "@services/dialog.service";
 import { RoonService } from "@services/roon.service";
@@ -40,6 +41,8 @@ describe("SettingsDialogComponent", () => {
     version: jest.Mock;
     pairingPin: jest.Mock;
     rotatePairingPin: jest.Mock;
+    openAIApiKey: jest.Mock;
+    saveOpenAIApiKey: jest.Mock;
   };
   let addPanelClass: jest.Mock;
   let removePanelClass: jest.Mock;
@@ -80,6 +83,8 @@ describe("SettingsDialogComponent", () => {
       version: jest.fn().mockImplementation(() => version),
       pairingPin: jest.fn().mockResolvedValue("482193"),
       rotatePairingPin: jest.fn().mockResolvedValue("111111"),
+      openAIApiKey: jest.fn().mockResolvedValue(""),
+      saveOpenAIApiKey: jest.fn().mockResolvedValue(undefined),
     };
     dialogService = {
       open: jest.fn(),
@@ -89,6 +94,7 @@ describe("SettingsDialogComponent", () => {
     removePanelClass = jest.fn();
     TestBed.configureTestingModule({
       providers: [
+        provideNoopAnimations(),
         MockProvider(MAT_DIALOG_DATA, { selectedTab }),
         MockProvider(DialogService, dialogService),
         MockProvider(SettingsService, settingsService),
@@ -113,5 +119,11 @@ describe("SettingsDialogComponent", () => {
     await component.rotatePairingPin();
     expect(roonService.rotatePairingPin).toHaveBeenCalled();
     expect(component.$pairingPin()).toBe("111111");
+  });
+
+  it("saves the OpenAI API key on the server", async () => {
+    component.openAIApiKey = "sk-user";
+    await component.saveOpenAIApiKey();
+    expect(roonService.saveOpenAIApiKey).toHaveBeenCalledWith("sk-user");
   });
 });

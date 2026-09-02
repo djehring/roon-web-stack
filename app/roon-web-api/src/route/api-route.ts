@@ -12,7 +12,7 @@ import {
   RoonImageFormat,
   RoonImageScale,
 } from "@model";
-import { clientManager, InvalidPairingPinError } from "@service";
+import { clientManager, InvalidPairingPinError, openaiKeyStore } from "@service";
 import {
   fetchTrackStory,
   fetchTrackSuggestions,
@@ -106,6 +106,13 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
   });
   server.post("/pairing", (_req, reply) => {
     return reply.status(200).send({ pin: clientManager.rotatePairingPin() });
+  });
+  server.get("/openai-key", (_req, reply) => {
+    return reply.status(200).send({ apiKey: openaiKeyStore.read() });
+  });
+  server.put<{ Body: { apiKey?: string } }>("/openai-key", (req, reply) => {
+    openaiKeyStore.save(req.body.apiKey ?? "");
+    return reply.status(204).send();
   });
   server.post<{ Params: ClientIdParam }>("/:client_id/unregister", (req, reply) => {
     const client_id = req.params.client_id;
@@ -502,7 +509,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       } catch (error) {
         if (isMissingOpenAIKeyError(error)) {
           return await reply.status(503).send({
-            error: "OpenAI API key not configured",
+            error: error.message,
           });
         }
         logger.error(`Error recognizing album: ${JSON.stringify(error)}`);

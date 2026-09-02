@@ -1839,6 +1839,26 @@ describe("roon-web-client-factory.ts test suite", () => {
     expect(restartSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("RoonWebClient#getAISearch should surface a 503 OpenAI error body", async () => {
+    const missing = "OpenAI API key is missing. Add yours in Settings.";
+    fetchMock
+      .once(mockVersionGet)
+      .once(mockRegisterPost)
+      .once((req: Request) => {
+        const url = new URL(`${client_path}/aisearch`, API_URL).toString();
+        if (req.method === "POST" && req.url === url) {
+          return Promise.resolve({
+            body: JSON.stringify({ error: missing }),
+            status: 503,
+          });
+        }
+        return Promise.reject(new Error("error"));
+      });
+    const client = roonWebClientFactory.build(API_URL);
+    await client.start();
+    await expect(client.getAISearch("query")).rejects.toEqual(new Error(missing));
+  });
+
   it("RoonWebClient should mark client to be refreshed if a new Ping is not received after expected time", async () => {
     fetchMock.once(mockVersionGet).once(mockRegisterPost);
     const client = roonWebClientFactory.build(API_URL);

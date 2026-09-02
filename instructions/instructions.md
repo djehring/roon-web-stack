@@ -108,41 +108,12 @@ yarn test      # test every workspace in dependency order
 
 ## Deployment
 
-### Building for NAS
-1. Build the Docker image for AMD64 architecture:
-   ```bash
-   ./scripts/build-nas-image.sh
-   ```
-   This will:
-   - Build the frontend Angular app
-   - Package it with the backend
-   - Create a Docker image
-   - Save the image as roon-backend.tar
+Pull `djehring/roon-web-stack` and run it next to an existing Roon Core.
+See [doc/deploy.md](../doc/deploy.md) for sibling Docker, sidecar Pi, and
+Docker Desktop topologies.
 
-### Deploying to NAS
-1. Create a `.env` file with your NAS credentials:
-   ```
-   NAS_HOST=192.168.0.14
-   NAS_USER=your_username
-   ROOT_PASSWORD=your_password
-   ```
-
-2. Deploy to NAS:
-   ```bash
-   ./scripts/deploy-nas.sh
-   ```
-   This will:
-   - Copy the tar file to the NAS
-   - Load the Docker image
-   - Start the container
-
-### Deployment Flow
-```mermaid
-graph LR
-    A[Build Frontend] --> B[Package with Backend]
-    B --> C[Create Docker Image]
-    C --> D[Deploy to NAS]
-    D --> E[Run Container]
+```bash
+docker compose -f docker-compose.host.yml up -d
 ```
 
 ## Notes

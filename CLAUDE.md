@@ -30,9 +30,8 @@ yarn frontend  # Angular dev server (port 4200)
 yarn workspace @djehring/roon-web-api test
 yarn workspace @djehring/roon-web-ng-client test
 
-# Docker build for NAS deployment
-yarn build:nas
-yarn deploy:nas
+# Production on Linux / NAS / Pi (host network)
+docker compose -f docker-compose.host.yml up -d
 ```
 
 ## Architecture
@@ -80,7 +79,9 @@ Path aliases in tsconfig:
 Single container serves both frontend (static files) and backend (API):
 - Multi-stage build defined in `app/roon-web-api/Dockerfile`
 - Angular dist copied to `/usr/src/app/web` and served by fastify-static
-- Environment variables: `ROON_CORE_HOST`, `OPENAI_API_KEY`, `LOG_LEVEL`, `PORT`
+- Environment variables: `ROON_CORE_HOST`, `LOG_LEVEL`, `PORT`.
+  Paste the OpenAI key in web Settings (stored on the config volume).
+  Optional `OPENAI_API_KEY` is an operator fallback only.
 
 ## Code Style Requirements
 

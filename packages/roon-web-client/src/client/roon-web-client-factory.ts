@@ -178,7 +178,7 @@ class InternalRoonWebClient implements RoonWebClient {
       const tracks = (await response.json()) as SuggestedTrack[];
       return { items: tracks };
     }
-    throw new Error("unable to send command");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 
   getTrackStory: (track: SuggestedTrack) => Promise<AITrackStoryResponse> = async (
@@ -204,7 +204,7 @@ class InternalRoonWebClient implements RoonWebClient {
       return { story: trackStory };
     }
 
-    throw new Error("Unable to fetch track story");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 
   playTracks: (zoneId: string, tracks: SuggestedTrack[]) => Promise<AISearchResponse> = async (
@@ -555,6 +555,16 @@ class InternalRoonWebClient implements RoonWebClient {
     throw new Error(errorBody.error || "Unable to recognize album");
   };
 
+  private openAIErrorMessage = async (response: Response): Promise<string> => {
+    const body = (await response.json().catch(() => ({ error: "" }))) as {
+      error?: string;
+    };
+    if (body.error && body.error !== "") {
+      return body.error;
+    }
+    return `request failed (${response.status})`;
+  };
+
   private ensureStared: () => string = () => {
     if (this._clientPath === undefined) {
       throw new Error(InternalRoonWebClient.CLIENT_NOT_STARTED_ERROR_MESSAGE);
@@ -711,7 +721,7 @@ class InternalRoonWebClient implements RoonWebClient {
     if (response.status === 200) {
       return response.json() as Promise<TranscriptionResponse>;
     }
-    throw new Error("Unable to transcribe audio");
+    throw new Error(await this.openAIErrorMessage(response));
   };
 }
 
