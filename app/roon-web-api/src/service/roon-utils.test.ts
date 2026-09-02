@@ -1018,7 +1018,12 @@ describe("roon-utils", () => {
       // Mock browse to item (get action list)
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 3 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 3,
+          hint: "action_list",
+        },
       };
 
       // Mock action list load
@@ -1069,7 +1074,12 @@ describe("roon-utils", () => {
     it("should handle action with follow-up list", async () => {
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 1 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 1,
+          hint: "action_list",
+        },
       };
 
       const mockActionList: RoonApiBrowseLoadResponse = {
@@ -1113,14 +1123,19 @@ describe("roon-utils", () => {
       (roon.browse as jest.Mock).mockResolvedValueOnce(mockBrowseResponse);
 
       await expect(playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle)).rejects.toThrow(
-        `No action list returned for item: ${mockItemKey}`
+        `No list returned for item: ${mockItemKey}`
       );
     });
 
     it("should throw error when requested action is not found", async () => {
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 2 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 2,
+          hint: "action_list",
+        },
       };
 
       // Action list without "Play Now"
@@ -1144,7 +1159,12 @@ describe("roon-utils", () => {
     it("should not match action without hint=action", async () => {
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 1 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 1,
+          hint: "action_list",
+        },
       };
 
       // "Play Now" exists but without hint=action
@@ -1165,7 +1185,12 @@ describe("roon-utils", () => {
     it("should execute Queue action when specified", async () => {
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 2 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 2,
+          hint: "action_list",
+        },
       };
 
       const mockActionList: RoonApiBrowseLoadResponse = {
@@ -1198,7 +1223,12 @@ describe("roon-utils", () => {
     it("should log available actions for debugging", async () => {
       const mockBrowseResponse: RoonApiBrowseResponse = {
         action: "list",
-        list: { title: "Album Actions", level: 1, count: 2 },
+        list: {
+          title: "Album Actions",
+          level: 1,
+          count: 2,
+          hint: "action_list",
+        },
       };
 
       const mockActionList: RoonApiBrowseLoadResponse = {
@@ -1220,9 +1250,9 @@ describe("roon-utils", () => {
 
       await playItemByKey(mockClientId, mockZoneId, mockItemKey, mockActionTitle);
 
-      expect(logger.debug).toHaveBeenCalledWith("Available actions for item:", [
-        { title: "Play Now", hint: "action", item_key: "play-now-key" },
-        { title: "Queue", hint: "action", item_key: "queue-key" },
+      expect(logger.debug).toHaveBeenCalledWith("Available items:", [
+        { title: "Play Now", hint: "action" },
+        { title: "Queue", hint: "action" },
       ]);
     });
   });
