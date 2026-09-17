@@ -298,10 +298,14 @@ describe("roon-extension.ts test suite", () => {
 
     jest.resetModules();
     jest.isolateModules((): void => {
-      roon = require("./roon-extension").roon as Roon;
+      roon = jest.requireActual<{ roon: Roon }>("./roon-extension").roon;
     });
 
-    const wsConnectMock = (extensionMock.api() as unknown as { ws_connect: jest.Mock }).ws_connect;
+    const wsConnectMock = (
+      extensionMock.api() as unknown as {
+        ws_connect: jest.Mock<void, [{ host: string; port: number; onclose?: () => void }]>;
+      }
+    ).ws_connect;
     wsConnectMock.mockClear();
 
     roon.startExtension();

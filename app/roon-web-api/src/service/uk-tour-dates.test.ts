@@ -260,26 +260,26 @@ describe("uk-tour-dates", () => {
       await expect(fetchUKTourDates("- Martin Simpson")).resolves.toEqual([
         { when: "19 September 2026", venue: "Otley Parish Church", city: "Leeds" },
       ]);
-      expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect(mockedAxios.get.mock.calls).toContainEqual([
         "https://www.last.fm/music/Martin+Simpson/+events",
-        expect.objectContaining({
+        expect.objectContaining<{ validateStatus: unknown }>({
           validateStatus: expect.any(Function),
-        })
-      );
+        }),
+      ]);
     });
 
     it("merges the official gig page so village-hall dates Last.fm missed still appear", async () => {
-      mockedAxios.get.mockImplementation(async (url: string) => {
+      mockedAxios.get.mockImplementation((url: string) => {
         if (String(url).includes("last.fm")) {
-          return {
+          return Promise.resolve({
             status: 200,
             data: lastFmEvent("2026-09-19T00:00:00Z", "Otley Parish Church", "Leeds, United Kingdom"),
-          };
+          });
         }
         if (String(url).includes("martinsimpsonmusic.com")) {
-          return { status: 200, data: officialJsonLd };
+          return Promise.resolve({ status: 200, data: officialJsonLd });
         }
-        return { status: 404, data: "" };
+        return Promise.resolve({ status: 404, data: "" });
       });
 
       await expect(fetchUKTourDates("Martin Simpson")).resolves.toEqual([
