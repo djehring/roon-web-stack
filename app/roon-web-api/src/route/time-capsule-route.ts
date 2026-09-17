@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { clientManager } from "@service";
 import {
   capsuleImage,
+  capsuleImageContentType,
   capsuleJob,
   getZoneCapsule,
   listCapsules,
@@ -42,7 +43,10 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
         const capsule = await readCapsule(request.params.id);
         if (!capsule) return reply.status(404).send();
         try {
-          const job = await startCapsule(capsule.request, capsule.id);
+          const job = await startCapsule(capsule.request, capsule.id, {
+            periodStart: capsule.periodStart,
+            periodEnd: capsule.periodEnd,
+          });
           return await reply.status(202).send(job);
         } catch (error) {
           return reply.status(503).send({ error: (error as Error).message });
@@ -59,8 +63,10 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
       routes.get<{ Params: { file: string } }>("/images/:file", async (request, reply) => {
         const image = await capsuleImage(request.params.file);
         if (!image) return reply.status(404).send();
-        const mime = image[0] === 0xff ? "image/jpeg" : image[0] === 0x89 ? "image/png" : "image/webp";
-        return reply.type(mime).header("Cache-Control", "private, max-age=604800, immutable").send(image);
+        return reply
+          .type(capsuleImageContentType(image))
+          .header("Cache-Control", "private, max-age=604800, immutable")
+          .send(image);
       });
       routes.get<{ Params: { zoneId: string } }>("/zone/:zoneId", async (request, reply) => {
         const capsule = await getZoneCapsule(request.params.zoneId);

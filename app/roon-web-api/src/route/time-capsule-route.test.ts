@@ -63,15 +63,25 @@ describe("Time Capsule routes", () => {
       timeZone: "Europe/London",
       tracks: [],
     };
-    jest
-      .mocked(readCapsule)
-      .mockResolvedValue({ id: "saved", title: "Week", contextLabel: "Week", createdAt: "", scenes: [], request });
+    jest.mocked(readCapsule).mockResolvedValue({
+      id: "saved",
+      title: "Week",
+      contextLabel: "Week",
+      createdAt: "",
+      scenes: [],
+      request,
+      periodStart: "1982-02-14",
+      periodEnd: "1982-02-20",
+    });
     jest.mocked(startCapsule).mockResolvedValue({ id: "saved", status: "researching" });
     const app = await server();
     try {
       const result = await app.inject({ method: "POST", url: "/paired/time-capsules/saved/rebuild" });
       expect(result.statusCode).toBe(202);
-      expect(startCapsule).toHaveBeenCalledWith(request, "saved");
+      expect(startCapsule).toHaveBeenCalledWith(request, "saved", {
+        periodStart: "1982-02-14",
+        periodEnd: "1982-02-20",
+      });
     } finally {
       await app.close();
     }
