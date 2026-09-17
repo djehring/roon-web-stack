@@ -38,6 +38,16 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
           return reply.status(503).send({ error: (error as Error).message });
         }
       });
+      routes.post<{ Params: { id: string } }>("/:id/rebuild", async (request, reply) => {
+        const capsule = await readCapsule(request.params.id);
+        if (!capsule) return reply.status(404).send();
+        try {
+          const job = await startCapsule(capsule.request, capsule.id);
+          return await reply.status(202).send(job);
+        } catch (error) {
+          return reply.status(503).send({ error: (error as Error).message });
+        }
+      });
       routes.get<{ Params: { id: string } }>("/jobs/:id", async (request, reply) => {
         const job = await capsuleJob(request.params.id);
         return job ? reply.send(job) : reply.status(404).send({ error: "Preparation not found. Please retry." });

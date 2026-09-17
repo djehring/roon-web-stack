@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import { clientManager } from "@service";
-import { getZoneCapsule, listCapsules, startCapsule } from "../ai-service/time-capsule";
+import { getZoneCapsule, listCapsules, readCapsule, startCapsule } from "../ai-service/time-capsule";
 import { registerTimeCapsuleRoutes } from "./time-capsule-route";
 
 jest.mock("@service", () => ({ clientManager: { get: jest.fn() } }));
@@ -8,6 +8,7 @@ jest.mock("../ai-service/time-capsule", () => ({
   ...jest.requireActual<typeof import("../ai-service/time-capsule")>("../ai-service/time-capsule"),
   startCapsule: jest.fn(),
   listCapsules: jest.fn(),
+  readCapsule: jest.fn(),
   getZoneCapsule: jest.fn(),
 }));
 
@@ -50,6 +51,27 @@ describe("Time Capsule routes", () => {
       expect(result.statusCode).toBe(202);
       expect(result.json()).toEqual({ id: "job", status: "researching" });
       expect(jest.mocked(startCapsule).mock.calls[0][0].query).toBe("Soul from Detroit");
+    } finally {
+      await app.close();
+    }
+  });
+  test("rebuild preserves the original request and saved capsule identity", async () => {
+    const request = {
+      query: "A historical week",
+      requestedAt: "2026-01-02T12:00:00Z",
+      locale: "en_GB",
+      timeZone: "Europe/London",
+      tracks: [],
+    };
+    jest
+      .mocked(readCapsule)
+      .mockResolvedValue({ id: "saved", title: "Week", contextLabel: "Week", createdAt: "", scenes: [], request });
+    jest.mocked(startCapsule).mockResolvedValue({ id: "saved", status: "researching" });
+    const app = await server();
+    try {
+      const result = await app.inject({ method: "POST", url: "/paired/time-capsules/saved/rebuild" });
+      expect(result.statusCode).toBe(202);
+      expect(startCapsule).toHaveBeenCalledWith(request, "saved");
     } finally {
       await app.close();
     }
