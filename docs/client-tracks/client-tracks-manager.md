@@ -4,12 +4,18 @@ The Client Tracks Manager is responsible for finding and playing tracks in Roon 
 
 ## Overview
 
+All AI-search playback clients send artist, album, and track metadata to
+`POST /api/:client_id/play-tracks`. The bridge owns matching and queueing;
+clients must not resolve title-only playback keys themselves. The web, iOS,
+iPadOS, and tvOS clients use this endpoint.
+
+
 The module's main function, `findTracksInRoon`, attempts to match and play a list of tracks in Roon using two different search strategies:
 
-1. **Album-based search (primary method)**: Searches for the track within its album context
-2. **Direct search (fallback method)**: Searches for the track directly using the track title and artist
+1. **Direct search (primary method)**: Searches for the track using the track title and artist
+2. **Album-based search (fallback method)**: Searches for the track within its album context
 
-For each track, the system first attempts to find it via album search, and if that fails, falls back to direct search.
+For each track, the system first attempts direct search, then album search. An AI album correction can provide another album to search while preserving the requested title and artist.
 
 **Important Playback Behavior:**
 - The first successfully found track is played immediately ("Play Now")
@@ -97,7 +103,7 @@ The direct search strategy (`findTrackInSearchResults`) follows these steps:
 1. **Perform Track Search**: Searches by track name, then by artist + track name
 2. **Check for Direct Matches**: Looks for direct matches in the search results
 3. **Navigate to Tracks Section**: If no direct match, checks the Tracks section 
-4. **Find Matching Track**: Uses both exact and flexible matching algorithms
+4. **Find Matching Track**: Uses the shared title-and-artist matcher in `matching-utils.ts`
 5. **Queue Track**: Uses the track's item key to queue it for playback
 
 This approach is more flexible but may not maintain album context.
@@ -113,7 +119,7 @@ Music track matching presents several unique challenges that this implementation
 **Solution**: 
 - Aggressive normalization of strings removes diacritics, punctuation, and case differences
 - Multiple search variations are tried in sequence
-- Both exact and fuzzy matching algorithms are implemented
+- Titles must match after normalization; spacing variations such as “Mah Na Mah Na” and “Mahna Mahna” are accepted
 
 ### 2. Artist Name Variations
 
@@ -122,16 +128,15 @@ Music track matching presents several unique challenges that this implementation
 **Solution**:
 - Special normalization for artist names in `normalizeArtistName`
 - Handling of common artist name variations
-- Flexible matching for collaborations and featured artists
+- Whole artist credits are compared, including individual Roon entity links and collaboration credits; shared words and tribute album titles are not artist matches
 
 ### 3. Classical Music Complexities
 
 **Challenge**: Classical music often has complex naming conventions (e.g., "Mozart: Symphony No. 40 in G minor, K.550").
 
 **Solution**:
-- Special handling for key signatures via `extractKeySignature`
-- Cleaning of classical titles with `cleanClassicalTitle`
-- Recognition of composer/work pattern in track names
+- Work titles retain their identifying text after ordinary normalization
+- A partial work title or a shared composer name does not justify substituting another recording
 
 ### 4. Remastered/Alternative Versions
 
@@ -140,7 +145,7 @@ Music track matching presents several unique challenges that this implementation
 **Solution**:
 - Normalization removes version information
 - Track matching ignores parenthetical information like "(2009 Remaster)"
-- Base title matching when exact matches fail
+- The requested artist must still match after title normalization
 
 ### 5. Track Numbering
 
@@ -183,14 +188,18 @@ Both `normalizeString` and `normalizeArtistName` functions prepare strings for c
 - Handling track numbers and disc numbers
 - Handling artist name variations
 
-### Exact vs Flexible Matching
+### Recording Identity
 
-The module implements multiple matching strategies:
+`matchTrackInList` applies the same checks to album tracks and direct search results:
 
-- **Exact Matching**: Requires normalized track titles to match exactly
-- **Classical Music Matching**: Special handling for classical compositions with key signatures
-- **Flexible Matching**: Falls back to substring matching when exact matches aren't found
-- **Artist Collaboration Handling**: Properly handles multi-artist tracks and collaborations
+- The title must match after normalization, including compact spacing and remaster suffixes.
+- The full requested artist must match a credit. Roon's `[[id|label]]` credits are decoded before normalization.
+- An album can supply a missing track credit only when it is credited to the requested artist. Explicitly different track credits are rejected.
+- Various Artists albums require a matching artist on the individual track.
+- No fallback selects the first title hit, a partial artist name, or a different song by the same artist.
+- GPT may suggest a different album, but the requested title and artist remain unchanged.
+
+Unverified tracks are returned as unmatched; accepted tracks preserve request order.
 
 ## Playback Methods
 
