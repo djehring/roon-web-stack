@@ -1,8 +1,54 @@
 import { Item } from "@model";
 import { Track } from "../ai-service/types/track";
-import { matchAlbumInList } from "./matching-utils";
+import { matchAlbumInList, matchesArtist, matchTrackInList } from "./matching-utils";
 
 describe("matching-utils", () => {
+  describe("recording identity", () => {
+    test.each([
+      ["Olivia Newton-John", "[[1|Olivia Newton-John]]", true],
+      ["Olivia Newton-John", "Juliana Hatfield", false],
+      ["Olivia Newton-John", "[[2|Juliana Hatfield]]", false],
+      ["Olivia Newton-John", "Juliana Hatfield Sings Olivia Newton-John", false],
+      ["Olivia Newton-John", "[[2|Juliana Hatfield Sings Olivia Newton-John]]", false],
+      ["John Lennon", "John Legend", false],
+      ["Queen", "Queens of the Stone Age", false],
+      ["Olivia Newton-John", undefined, false],
+      ["Olivia Newton-John", "", false],
+      ["", "", false],
+      ["The Beatles", "Beatles", true],
+      ["Sinéad O’Connor", "Sinead O'Connor", true],
+      ["Olivia Newton-John", "[[1|John Travolta]], [[2|Olivia Newton-John]]", true],
+      ["Olivia Newton-John", "John Travolta & Olivia Newton-John", true],
+    ])("artist %s against %s matches=%s", (artist, credit, expected) => {
+      expect(matchesArtist(artist, credit)).toBe(expected);
+    });
+
+    test("a confirmed album artist may supply a missing track credit, never override another performer", () => {
+      const track = { artist: "Olivia Newton-John", album: "Grease", track: "Hopelessly Devoted to You" };
+      const item = { title: track.track, item_key: "track" };
+      expect(matchTrackInList([item], track, "Olivia Newton-John")).toBe(item);
+      expect(matchTrackInList([item], track, "Various Artists")).toBeUndefined();
+      expect(matchTrackInList([item], track)).toBeUndefined();
+      expect(
+        matchTrackInList([{ ...item, subtitle: "Juliana Hatfield" }], track, "Olivia Newton-John")
+      ).toBeUndefined();
+    });
+
+    test("a lone same-title album must still have the requested artist", () => {
+      const track = { artist: "Olivia Newton-John", album: "Grease", track: "Hopelessly Devoted to You" };
+      expect(
+        matchAlbumInList({ items: [{ title: "Grease", item_key: "album", subtitle: "[[1|Juliana Hatfield]]" }] }, track)
+      ).toBeNull();
+    });
+
+    test("track matching keeps remasters but rejects partial titles and missing playback keys", () => {
+      const track = { artist: "The Muppets", album: "", track: "Mah Na Mah Na" };
+      const item = { title: "1-6 Mahna Mahna (2009 Remaster)", subtitle: "The Muppets", item_key: "track" };
+      expect(matchTrackInList([item], track)).toBe(item);
+      expect(matchTrackInList([{ ...item, title: "Mahna Mahna Medley" }], track)).toBeUndefined();
+      expect(matchTrackInList([{ ...item, item_key: undefined }], track)).toBeUndefined();
+    });
+  });
   describe("matchAlbumInList", () => {
     // Common test data
     const createAlbumsList = (items: Item[]) => ({ items });
