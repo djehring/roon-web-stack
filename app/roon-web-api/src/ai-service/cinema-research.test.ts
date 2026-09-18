@@ -17,7 +17,7 @@ describe("Configured Cinema research", () => {
     const calls: { instructions: string; input: string; tools?: unknown[] }[] = [];
     const source = "https://example.org/primary-source";
     const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
-      const body = JSON.parse(init?.body as string) as typeof calls[number];
+      const body = JSON.parse(init?.body as string) as (typeof calls)[number];
       calls.push(body);
       if (body.instructions.startsWith("Return JSON {searches:"))
         return Promise.reject(new Error("Stop before images"));
@@ -40,7 +40,11 @@ describe("Configured Cinema research", () => {
             contextLabel: subject,
             periodStart: "1984-01-01",
             periodEnd: "1984-12-31",
-            scenes: [scene, { ...scene, topic: "sports", title: "Unselected sport" }],
+            scenes: [
+              scene,
+              { ...scene, topic: "sports", title: "Unselected sport" },
+              { ...scene, topic: "albumCovers", title: "Web cover must be ignored" },
+            ],
           });
       return Promise.resolve(
         new Response(
@@ -65,7 +69,7 @@ describe("Configured Cinema research", () => {
         tracks: [{ artist: "Selected performer", track: "Selected track", album: "Selected recording" }],
         options: {
           mode,
-          topics: [topic],
+          topics: [topic, "albumCovers"],
           subject,
           region: "GB",
           workContext: "composition",
@@ -86,6 +90,7 @@ describe("Configured Cinema research", () => {
       expect(submitted.topic).toBe(topic);
       for (const call of calls.slice(0, 3)) {
         expect(call.instructions).toContain("Do not add unselected topics");
+        expect(call.instructions).toContain("Album covers are supplied directly by Roon");
         expect(call.input).toContain(subject);
       }
       expect(submitted.selectedMusic !== undefined).toBe(mode !== "period");

@@ -15,8 +15,10 @@ The original query, timestamp and soundtrack are preserved. An optional `options
 
 Topics include period headlines/sport/culture/everyday life; artist photographs/career/collaborators/places;
 and composer/programme notes/artwork/manuscripts/performers. Album covers are an optional topic in every
-research mode; only covers available under the normal reusable-image licence gate are eligible. Wider
-history is optional for artist/work modes.
+research mode. The bridge resolves one selected track per distinct album and retrieves the same artwork
+from the paired Roon library; archive search is not used for covers. Covers are downloaded as fitted JPEGs and cached beside the web images, then attached after web-image review in every mode. Lookup uses isolated browse sessions with an eight-second per-operation timeout and a thirty-second total cover budget. Wider history is optional for artist/work modes.
+
+A covers-only montage accepts one album and requires neither an OpenAI key nor web research. Other montages retain their three-picture minimum. For a clearly identified artist without a date window, artist photographs and career photo captions continue through the direct gallery even when places or other context topics are selected. Only those extra topics need sourced research; that mixed path compiles the retrieved evidence without a second full web audit. Dated and other researched programmes retain their audit. Artist galleries use Commons first and try Wikipedia/Openverse when fewer than six matching candidates survive filtering. All web pictures retain source, licence and quality checks.
 See `capsule-options.ts` for the exact IDs. Topic order is canonicalized before cache hashing.
 
 Configured requests research only selected topics, independently audit the evidence, filter compiled scenes
@@ -28,7 +30,7 @@ An artist request that includes Artist photographs cannot publish without an acc
 places and collaborators are not accepted as a substitute.
 
 Personal Photos montages are entirely on-device and never use these routes. The API rejects `photos` mode.
-Requests without `options` retain their existing behavior. Research checkpoints now use version 4.
+Requests without `options` retain their existing behavior. Research checkpoints now use version 6 so older web-cover research cannot be reused.
 
 ## Saved playlist management
 
@@ -110,3 +112,6 @@ Simple artist galleries bypass biography research, research verification, scene 
 Dated requests, ambiguous short artist names and wider contextual topics retain the research workflow. Those topics are researched concurrently, with at most three active topics per build. Their results retain the selected topic order and all finish before independent verification starts. Research notes are concise to reduce repeated material in verification and compilation. Archive searches use three rolling workers, so one slow lookup no longer stalls an entire batch. Photo review runs two independent batches of three images at a time and can approve only the photos actually present in that batch. Licence, metadata, subject and pixel checks remain in place. Progress writes are serialized, and failures drain active work before allowing a retry, preventing late progress from an earlier run.
 
 For GPT-5/6 models, converting verified notes and archive metadata into JSON uses `reasoning.effort: low`. Web research, independent verification and pixel review retain their default reasoning. Other model overrides do not receive this setting. The default [GPT-5.6 Sol model supports low reasoning](https://developers.openai.com/api/docs/models/gpt-5.6-sol); no model change is required.
+
+
+The archive-search progress counter explicitly counts searches, not downloaded pictures. Download and quality-review messages report their own photo counts. Commons queries include `filetype:bitmap`, preventing PDF/DjVu book text from exhausting the first page of image candidates. Undated galleries accept an honest unknown photo date when the subject and picture quality are clear; dated programmes retain their chronology checks.

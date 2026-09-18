@@ -195,7 +195,7 @@ describe("Time Capsule", () => {
     const input = request();
     const id = capsuleKey(input);
     const draft = {
-      researchVersion: 4,
+      researchVersion: 6,
       id,
       title: "Verified bulletin",
       contextLabel: "Subject",
@@ -211,7 +211,9 @@ describe("Time Capsule", () => {
       for (let n = 0; n < 100 && job.status !== "failed"; n++) await new Promise((resolve) => setTimeout(resolve, 10));
       expect(job.status).toBe("failed");
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).instructions).toContain("archive search phrases");
+      expect(
+        (JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as { instructions: string }).instructions
+      ).toContain("archive search phrases");
       expect(JSON.parse(await fs.readFile(path.join(directory, `draft-${id}.json`), "utf8"))).toEqual(draft);
       expect(await readCapsule(id)).toBeUndefined();
     } finally {
@@ -275,7 +277,7 @@ describe("Time Capsule", () => {
         const newsRequests = requests.slice(rebuild ? 0 : 2);
         expect(newsRequests[3].instructions).toContain("Independently fact-check");
         expect(newsRequests[3].instructions).toContain("NOT a singles chart");
-        expect(newsRequests.slice(0, 3).map((r) => JSON.parse(r.input).topic)).toEqual([
+        expect(newsRequests.slice(0, 3).map((r) => (JSON.parse(r.input) as { topic: string }).topic)).toEqual([
           "national news, politics and the economy",
           "sport fixtures and results",
           "television, radio, cinema and everyday life",
@@ -283,7 +285,9 @@ describe("Time Capsule", () => {
         expect(requests.every((r) => !r.input.includes("Test artist"))).toBe(true);
         expect(newsRequests.every((r) => !r.input.includes("Top 10"))).toBe(true);
         for (const research of newsRequests.slice(0, 4)) {
-          expect(JSON.parse(research.input).period).toEqual({ periodStart: "1982-09-27", periodEnd: "1982-10-03" });
+          expect((JSON.parse(research.input) as { period: { periodStart: string; periodEnd: string } }).period).toEqual(
+            { periodStart: "1982-09-27", periodEnd: "1982-10-03" }
+          );
         }
         expect(await readCapsule(job.id)).toBeUndefined();
       } finally {
@@ -361,7 +365,7 @@ describe("Time Capsule", () => {
     const keyMock = jest.spyOn(openaiKeyStore, "read").mockReturnValue("test-key");
     const requests: { input: string; instructions: string; tools?: unknown[] }[] = [];
     const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation((_input, options) => {
-      const body = JSON.parse(options?.body as string);
+      const body = JSON.parse(options?.body as string) as (typeof requests)[number];
       requests.push(body);
       if (requests.length > 3) return Promise.reject(new Error("Stop before images"));
       const result = body.tools
@@ -406,9 +410,9 @@ describe("Time Capsule", () => {
         expect(body.input).not.toContain("Test artist");
         expect(body.instructions).not.toContain("At least two thirds");
       }
-      const saved = JSON.parse(await fs.readFile(path.join(directory, `draft-${id}.json`), "utf8"));
+      const saved = JSON.parse(await fs.readFile(path.join(directory, `draft-${id}.json`), "utf8")) as TimeCapsule;
       expect(saved.title).toBe("Paris");
-      expect(saved.researchVersion).toBe(4);
+      expect(saved.researchVersion).toBe(6);
     } finally {
       fetchMock.mockRestore();
       keyMock.mockRestore();
@@ -904,7 +908,7 @@ describe("Time Capsule", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(rebuild.status).toBe("failed");
-      expect(rebuild.error).toContain("Not enough distinct archive photographs");
+      expect(rebuild.error).toContain("Not enough distinct pictures");
       expect(await readCapsule(job.id)).toEqual(original);
       expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ Authorization: "Bearer saved-test-key" });
       expect(await capsuleImage("../../secret")).toBeUndefined();
