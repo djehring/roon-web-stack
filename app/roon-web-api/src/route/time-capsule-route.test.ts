@@ -1,12 +1,26 @@
 import Fastify from "fastify";
 import { clientManager } from "@service";
-import { getZoneCapsule, listCapsules, readCapsule, startCapsule } from "../ai-service/time-capsule";
+import {
+  CapsuleConflict,
+  capsuleJob,
+  deleteCapsule,
+  getZoneCapsule,
+  listCapsules,
+  readCapsule,
+  startCapsule,
+  updateCapsule,
+} from "../ai-service/time-capsule";
+import { cinemaArtwork } from "../service/cinema-artwork";
 import { registerTimeCapsuleRoutes } from "./time-capsule-route";
 
+jest.mock("../service/cinema-artwork", () => ({ cinemaArtwork: jest.fn() }));
 jest.mock("@service", () => ({ clientManager: { get: jest.fn() } }));
 jest.mock("../ai-service/time-capsule", () => ({
   ...jest.requireActual<typeof import("../ai-service/time-capsule")>("../ai-service/time-capsule"),
+  capsuleJob: jest.fn(),
   startCapsule: jest.fn(),
+  updateCapsule: jest.fn(),
+  deleteCapsule: jest.fn(),
   listCapsules: jest.fn(),
   readCapsule: jest.fn(),
   getZoneCapsule: jest.fn(),
@@ -24,11 +38,74 @@ describe("Time Capsule routes", () => {
   test("advertises options support only to paired clients", async () => {
     const app = await server();
     try {
-      expect((await app.inject("/paired/time-capsules/capabilities")).json()).toEqual({ optionsVersion: 2 });
+      expect((await app.inject("/paired/time-capsules/capabilities")).json()).toEqual({
+        optionsVersion: 2,
+        managementVersion: 1,
+      });
       jest.mocked(clientManager.get).mockImplementation(() => {
         throw new Error("Not registered");
       });
       expect((await app.inject("/unknown/time-capsules/capabilities")).statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+  test("resolves artwork without starting a generation and rejects unpaired lookups", async () => {
+    jest.mocked(cinemaArtwork).mockResolvedValue("cover-key");
+    const app = await server();
+    const payload = {
+      zoneId: "living",
+      tracks: [{ artist: "ABBA", track: "Dancing Queen", album: "Arrival" }],
+    };
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: "/paired/time-capsules/artwork",
+        payload,
+      });
+      expect(result.json()).toEqual({ imageKey: "cover-key" });
+      expect(cinemaArtwork).toHaveBeenCalledWith("living", payload.tracks);
+      expect(startCapsule).not.toHaveBeenCalled();
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/paired/time-capsules/artwork",
+            payload: {},
+          })
+        ).statusCode
+      ).toBe(400);
+      jest.mocked(clientManager.get).mockImplementation(() => {
+        throw new Error("Unpaired");
+      });
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/unknown/time-capsules/artwork",
+            payload,
+          })
+        ).statusCode
+      ).toBe(403);
+      expect(cinemaArtwork).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+  test("polling passes the requested generation through to the job lookup", async () => {
+    jest.mocked(capsuleJob).mockResolvedValue({
+      id: "saved",
+      generation: "run-2",
+      status: "failed",
+      error: "Interrupted",
+    });
+    const app = await server();
+    try {
+      const result = await app.inject(
+        "/paired/time-capsules/jobs/saved?generation=run-2"
+      );
+      expect(capsuleJob).toHaveBeenCalledWith("saved", "run-2");
+      expect(result.json<{ status: string }>().status).toBe("failed");
     } finally {
       await app.close();
     }
@@ -125,6 +202,67 @@ describe("Time Capsule routes", () => {
         periodStart: "1982-02-14",
         periodEnd: "1982-02-20",
       });
+    } finally {
+      await app.close();
+    }
+  });
+  test("edits only visual options, with paired access and validation", async () => {
+    const options = {
+      mode: "period",
+      topics: ["headlines"],
+      subject: "September 1976",
+      region: "GB",
+      workContext: "composition",
+      captions: "brief",
+      motion: "gentle",
+      pace: "standard",
+      order: "curated",
+    };
+    jest.mocked(updateCapsule).mockResolvedValue({ id: "saved", status: "researching" });
+    const app = await server();
+    try {
+      const result = await app.inject({
+        method: "PUT",
+        url: "/paired/time-capsules/saved",
+        payload: { options, tracks: [{ artist: "Unwanted replacement", track: "Ignore me" }] },
+      });
+      expect(result.statusCode).toBe(202);
+      expect(updateCapsule).toHaveBeenCalledWith("saved", options);
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/saved", payload: { options: {} } })).statusCode
+      ).toBe(400);
+      jest.mocked(updateCapsule).mockRejectedValue(new CapsuleConflict("Already updating"));
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/saved", payload: { options } })).statusCode
+      ).toBe(409);
+      jest.mocked(updateCapsule).mockResolvedValue(undefined);
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/missing", payload: { options } })).statusCode
+      ).toBe(404);
+      jest.mocked(clientManager.get).mockImplementation(() => {
+        throw new Error("Not registered");
+      });
+      expect(
+        (await app.inject({ method: "PUT", url: "/unknown/time-capsules/saved", payload: { options } })).statusCode
+      ).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+  test("deletion is paired, idempotent and reports active regeneration", async () => {
+    jest.mocked(deleteCapsule).mockResolvedValue(undefined);
+    const app = await server();
+    try {
+      expect((await app.inject({ method: "DELETE", url: "/paired/time-capsules/saved" })).statusCode).toBe(204);
+      expect(deleteCapsule).toHaveBeenCalledWith("saved");
+      jest.mocked(deleteCapsule).mockRejectedValue(new CapsuleConflict("Wait for regeneration"));
+      const busy = await app.inject({ method: "DELETE", url: "/paired/time-capsules/saved" });
+      expect(busy.statusCode).toBe(409);
+      expect(busy.json<{ error: string }>().error).toBe("Wait for regeneration");
+      jest.mocked(clientManager.get).mockImplementation(() => {
+        throw new Error("Not registered");
+      });
+      expect((await app.inject({ method: "DELETE", url: "/unknown/time-capsules/saved" })).statusCode).toBe(403);
     } finally {
       await app.close();
     }

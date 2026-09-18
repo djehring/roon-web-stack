@@ -1,16 +1,21 @@
 import { FastifyInstance } from "fastify";
 import { clientManager } from "@service";
+import { validateCapsuleOptions } from "../ai-service/capsule-options";
 import {
+  CapsuleConflict,
   capsuleImage,
   capsuleImageContentType,
   capsuleJob,
+  deleteCapsule,
   getZoneCapsule,
   listCapsules,
   readCapsule,
   setZoneCapsule,
   startCapsule,
+  updateCapsule,
   validateCapsuleRequest,
 } from "../ai-service/time-capsule";
+import { cinemaArtwork } from "../service/cinema-artwork";
 
 export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
   await server.register(
@@ -25,7 +30,55 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
         }
       });
       routes.get("/", async () => listCapsules());
-      routes.get("/capabilities", () => ({ optionsVersion: 2 }));
+      routes.get("/capabilities", () => ({ optionsVersion: 2, managementVersion: 1 }));
+      routes.post<{ Body: { zoneId?: unknown; tracks?: unknown } | null }>(
+        "/artwork",
+        async (request, reply) => {
+          const { zoneId, tracks } = request.body ?? {};
+          if (
+            typeof zoneId !== "string" ||
+            !zoneId.trim() ||
+            zoneId.length > 300 ||
+            !Array.isArray(tracks)
+          ) {
+            return reply
+              .status(400)
+              .send({ error: "Provide a room and playlist tracks." });
+          }
+          try {
+            const input = validateCapsuleRequest({
+              query: "Artwork",
+              requestedAt: new Date().toISOString(),
+              tracks,
+            });
+            return { imageKey: await cinemaArtwork(zoneId, input.tracks) };
+          } catch (error) {
+            return reply.status(400).send({ error: (error as Error).message });
+          }
+        }
+      );
+      routes.put<{ Params: { id: string }; Body: { options?: unknown } | null }>("/:id", async (request, reply) => {
+        let options;
+        try {
+          options = validateCapsuleOptions(request.body?.options);
+        } catch (error) {
+          return reply.status(400).send({ error: (error as Error).message });
+        }
+        try {
+          const job = await updateCapsule(request.params.id, options);
+          return job ? await reply.status(202).send(job) : await reply.status(404).send();
+        } catch (error) {
+          return reply.status(error instanceof CapsuleConflict ? 409 : 503).send({ error: (error as Error).message });
+        }
+      });
+      routes.delete<{ Params: { id: string } }>("/:id", async (request, reply) => {
+        try {
+          await deleteCapsule(request.params.id);
+          return await reply.status(204).send();
+        } catch (error) {
+          return reply.status(error instanceof CapsuleConflict ? 409 : 503).send({ error: (error as Error).message });
+        }
+      });
       routes.post("/", async (request, reply) => {
         let input;
         try {
@@ -53,8 +106,8 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
           return reply.status(503).send({ error: (error as Error).message });
         }
       });
-      routes.get<{ Params: { id: string } }>("/jobs/:id", async (request, reply) => {
-        const job = await capsuleJob(request.params.id);
+      routes.get<{ Params: { id: string }; Querystring: { generation?: string } }>("/jobs/:id", async (request, reply) => {
+        const job = await capsuleJob(request.params.id, request.query.generation);
         return job ? reply.send(job) : reply.status(404).send({ error: "Preparation not found. Please retry." });
       });
       routes.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
