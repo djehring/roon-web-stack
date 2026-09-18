@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { cinemaResponse, withCinemaResponses } from "./cinema-responses";
+import {
+  cinemaProgress,
+  cinemaResponse,
+  withCinemaResponses,
+} from "./cinema-responses";
 
 jest.mock("node:timers/promises", () => ({
   setTimeout: jest.fn().mockResolvedValue(undefined),
@@ -24,6 +28,31 @@ describe("Cinema research timeouts", () => {
   afterEach(async () => {
     jest.restoreAllMocks();
     await fs.rm(directory, { force: true, recursive: true });
+  });
+
+  test("concurrent stage updates persist in order", async () => {
+    const writes: string[] = [];
+    await withCinemaResponses(
+      {
+        directory,
+        progress: async (message) => {
+          writes.push(`start:${message}`);
+          await new Promise((resolve) =>
+            setTimeout(resolve, message === "first" ? 20 : 0)
+          );
+          writes.push(`end:${message}`);
+        },
+      },
+      async () => {
+        await Promise.all([cinemaProgress("first"), cinemaProgress("second")]);
+      }
+    );
+    expect(writes).toEqual([
+      "start:first",
+      "end:first",
+      "start:second",
+      "end:second",
+    ]);
   });
 
   test("web research has a longer initial budget, retries once and reports its stage", async () => {

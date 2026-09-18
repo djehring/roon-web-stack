@@ -17,7 +17,17 @@ export function withCinemaResponses<T>(
   context: ResponseContext,
   work: () => Promise<T>
 ): Promise<T> {
-  return contexts.run(context, work);
+  let progress = Promise.resolve();
+  return contexts.run(
+    {
+      ...context,
+      progress: (message) => {
+        progress = progress.then(() => context.progress(message));
+        return progress;
+      },
+    },
+    work
+  );
 }
 
 export function cinemaProgress(message: string): Promise<void> | undefined {

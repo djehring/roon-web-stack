@@ -2,12 +2,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { openaiKeyStore } from "../service/openai-key-store";
-import { startCapsule, validateCapsuleRequest } from "./time-capsule";
+import { startCapsule, TimeCapsule, validateCapsuleRequest } from "./time-capsule";
 
 describe("Configured Cinema research", () => {
   test.each([
     { mode: "period", topic: "headlines", subject: "UK top ten in 1984", dated: true },
-    { mode: "artist", topic: "artistImages", subject: "Django Reinhardt's greatest hits", dated: false },
+    { mode: "artist", topic: "historicalContext", subject: "Django Reinhardt's greatest hits", dated: false },
     { mode: "work", topic: "manuscripts", subject: "Beethoven Symphony No. 6, recorded in 1984", dated: false },
   ])("carries $mode choices through research, audit and the saved draft", async ({ mode, topic, subject, dated }) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cinema-options-test-"));
@@ -17,7 +17,7 @@ describe("Configured Cinema research", () => {
     const calls: { instructions: string; input: string; tools?: unknown[] }[] = [];
     const source = "https://example.org/primary-source";
     const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
-      const body = JSON.parse(init?.body as string);
+      const body = JSON.parse(init?.body as string) as typeof calls[number];
       calls.push(body);
       if (body.instructions.startsWith("Return JSON {searches:"))
         return Promise.reject(new Error("Stop before images"));
@@ -82,13 +82,14 @@ describe("Configured Cinema research", () => {
       }
       expect(job.error).toBe("Stop before images");
       expect(calls).toHaveLength(4);
-      expect(JSON.parse(calls[0].input).topic).toBe(topic);
+      const submitted = JSON.parse(calls[0].input) as { topic: string; selectedMusic?: unknown };
+      expect(submitted.topic).toBe(topic);
       for (const call of calls.slice(0, 3)) {
         expect(call.instructions).toContain("Do not add unselected topics");
         expect(call.input).toContain(subject);
       }
-      expect(JSON.parse(calls[0].input).selectedMusic !== undefined).toBe(mode !== "period");
-      const draft = JSON.parse(await fs.readFile(path.join(directory, `draft-${job.id}.json`), "utf8"));
+      expect(submitted.selectedMusic !== undefined).toBe(mode !== "period");
+      const draft = JSON.parse(await fs.readFile(path.join(directory, `draft-${job.id}.json`), "utf8")) as TimeCapsule;
       expect(draft.request).toEqual(input);
       expect(draft.scenes).toHaveLength(1);
       expect(draft.scenes[0].topic).toBe(topic);
