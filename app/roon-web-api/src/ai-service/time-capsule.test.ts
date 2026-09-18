@@ -6,17 +6,20 @@ import {
   archiveDescriptionDate,
   attachVerifiedImageSubjects,
   capsuleCoverageError,
-  capsuleResearchBrief,
-  capsuleRegion,
   capsuleImage,
   capsuleImageContentType,
   capsuleKey,
+  capsuleRegion,
+  capsuleResearchBrief,
+  capsuleResearchMode,
   commonsCandidate,
   eligiblePhotograph,
   getZoneCapsule,
+  openverseCandidate,
   photographBefore,
-  photographWithinEra,
   photographMatchesScene,
+  photographWithinEra,
+  plannedImageSearches,
   readCapsule,
   researchedURLs,
   reviewPhotographs,
@@ -24,8 +27,8 @@ import {
   startCapsule,
   TimeCapsule,
   validateCapsuleRequest,
-  validateProgramme,
   validatedCapsulePeriod,
+  validateProgramme,
 } from "./time-capsule";
 
 const request = () =>
@@ -48,6 +51,25 @@ const scene = {
 };
 
 describe("Time Capsule", () => {
+  test("all stories retain targeted archive searches before generic subjects fill the search budget", () => {
+    const headlines = Array.from({ length: 25 }, (_, n) => ({
+      id: `scene-${n}`,
+      title: `Paris story ${n}`,
+      dateLabel: "14 June 1940",
+      imageSubjects: ["Paris", "Champs-Elysees", "Hotel de Ville"],
+    }));
+    const plan = {
+      searches: headlines.map((h) => ({ sceneId: h.id, queries: [`event ${h.id} 1940`, `archive ${h.id}`] })),
+    };
+    const searches = plannedImageSearches(plan, headlines, "1945");
+    expect(searches).toHaveLength(72);
+    for (const h of headlines) {
+      expect(searches).toContainEqual({ sceneId: h.id, query: `event ${h.id} 1940` });
+      expect(searches).toContainEqual({ sceneId: h.id, query: `archive ${h.id}` });
+    }
+    expect(searches.some((s) => s.query === "Paris 1945")).toBe(false);
+    expect(searches.some((s) => s.query === "Paris 1940")).toBe(true);
+  });
   test("allows dated nearby-era illustrations without backdating modern photographs", () => {
     const photo = {
       downloadUrl: "https://upload.wikimedia.org/portrait.jpg",
@@ -173,6 +195,7 @@ describe("Time Capsule", () => {
     const input = request();
     const id = capsuleKey(input);
     const draft = {
+      researchVersion: 4,
       id,
       title: "Verified bulletin",
       contextLabel: "Subject",
@@ -188,7 +211,7 @@ describe("Time Capsule", () => {
       for (let n = 0; n < 100 && job.status !== "failed"; n++) await new Promise((resolve) => setTimeout(resolve, 10));
       expect(job.status).toBe("failed");
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).instructions).toContain("Wikimedia Commons search");
+      expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).instructions).toContain("archive search phrases");
       expect(JSON.parse(await fs.readFile(path.join(directory, `draft-${id}.json`), "utf8"))).toEqual(draft);
       expect(await readCapsule(id)).toBeUndefined();
     } finally {
@@ -282,6 +305,117 @@ describe("Time Capsule", () => {
     expect(brief).not.toHaveProperty("tracks");
     expect(JSON.stringify(brief)).not.toContain(input.query);
     expect(capsuleResearchBrief(request())).toHaveProperty("subject", request().query);
+  });
+
+  test.each([
+    ["Top django Reinhardt hits 1939 to 1945", "subject"],
+    ["World War 2 in Paris", "subject"],
+    ["Paris 1939-1945", "subject"],
+    ["French jazz in the 1960s", "subject"],
+    ["David Bowie hits 1982", "subject"],
+    ["Motown hits 1965", "subject"],
+    ["Top 10 hits October 1, 1978", "period"],
+    ["UK top 20 hits first week of October 1982", "period"],
+    ["Billboard hits in October 1982", "period"],
+    ["Popular music from 1939 to 1945", "period"],
+  ])("preserves subject intent for %s", (query, expected) => {
+    expect(capsuleResearchMode({ ...request(), query })).toBe(expected);
+  });
+
+  test("dated subject research retains the theme and has no home-country or topic quota", () => {
+    const input = { ...request(), query: "Top django Reinhardt hits 1939 to 1945" };
+    const period = { periodStart: "1939-01-01", periodEnd: "1945-12-31" };
+    expect(capsuleResearchBrief(input, period)).toMatchObject({ subject: input.query, period });
+    const capsule: TimeCapsule = {
+      id: "subject",
+      title: "Paris",
+      contextLabel: "Paris",
+      createdAt: "",
+      request: input,
+      scenes: Array.from({ length: 6 }, (_, i) => ({
+        ...scene,
+        id: String(i),
+        scope: "Culture",
+        countryCodes: ["FR"],
+      })),
+    };
+    expect(capsuleCoverageError(capsule)).toBeUndefined();
+    expect(capsuleCoverageError(capsule, true)).toBeUndefined();
+  });
+
+  test("discards a legacy off-topic draft and preserves subject through research, audit and compilation", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "capsule-subject-test-"));
+    const oldDirectory = process.env.TIME_CAPSULE_CACHE_DIR;
+    process.env.TIME_CAPSULE_CACHE_DIR = directory;
+    const input = { ...request(), query: "Top django Reinhardt hits 1939 to 1945" };
+    const id = capsuleKey(input);
+    await fs.writeFile(
+      path.join(directory, `draft-${id}.json`),
+      JSON.stringify({
+        id,
+        request: input,
+        title: "Wrong British bulletin",
+        scenes: [scene],
+      })
+    );
+    const keyMock = jest.spyOn(openaiKeyStore, "read").mockReturnValue("test-key");
+    const requests: { input: string; instructions: string; tools?: unknown[] }[] = [];
+    const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation((_input, options) => {
+      const body = JSON.parse(options?.body as string);
+      requests.push(body);
+      if (requests.length > 3) return Promise.reject(new Error("Stop before images"));
+      const result = body.tools
+        ? "Sourced Paris history"
+        : JSON.stringify({
+            title: "Paris",
+            periodStart: "1939-01-01",
+            periodEnd: "1945-12-31",
+            scenes: [
+              {
+                ...scene,
+                title: "Paris",
+                scope: "Culture",
+                countryCodes: ["FR"],
+                eventStart: "1944-08-25",
+                eventEnd: "1944-08-25",
+              },
+            ],
+          });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                content: [{ type: "output_text", text: result, annotations: [{ type: "url_citation", url: source }] }],
+              },
+            ],
+          })
+        )
+      );
+    });
+    try {
+      const job = await startCapsule(input, id, { periodStart: "1939-01-01", periodEnd: "1945-12-31" });
+      for (let n = 0; n < 100 && job.status !== "failed"; n++) await new Promise((r) => setTimeout(r, 10));
+      expect(job.error).toBe("Stop before images");
+      expect(requests[0].instructions).toContain("photographic history");
+      expect(requests[1].instructions).toContain("Independently fact-check");
+      for (const body of requests.slice(0, 3)) {
+        expect(body.input).toContain(`"subject":${JSON.stringify(input.query)}`);
+        expect(body.input).not.toContain("Test artist");
+        expect(body.instructions).not.toContain("At least two thirds");
+      }
+      const saved = JSON.parse(await fs.readFile(path.join(directory, `draft-${id}.json`), "utf8"));
+      expect(saved.title).toBe("Paris");
+      expect(saved.researchVersion).toBe(4);
+    } finally {
+      fetchMock.mockRestore();
+      keyMock.mockRestore();
+      if (oldDirectory === undefined) delete process.env.TIME_CAPSULE_CACHE_DIR;
+      else process.env.TIME_CAPSULE_CACHE_DIR = oldDirectory;
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("refuses missing, impossible and reversed resolved periods", () => {
@@ -404,6 +538,35 @@ describe("Time Capsule", () => {
     expect(commonsCandidate({ ...info, extmetadata: {} })).toBeUndefined();
     expect(commonsCandidate({ ...info, width: 399 })).toBeUndefined();
     expect(capsuleImageContentType(Buffer.from("GIF89a archive image"))).toBe("image/gif");
+  });
+
+  test("accepts Openverse Flickr photographs with the same licence class and rejects the rest", () => {
+    const photo = {
+      title: "Lionel Richie in Black and White",
+      url: "https://live.staticflickr.com/65535/abc_b.jpg",
+      foreign_landing_url: "https://www.flickr.com/photos/someone/123",
+      creator: "A photographer",
+      license: "by-sa",
+      license_version: "2.0",
+      license_url: "https://creativecommons.org/licenses/by-sa/2.0/",
+      width: 1024,
+      filetype: "jpg",
+      tags: [{ name: "lionel richie" }],
+    };
+    expect(openverseCandidate(photo)?.credit).toBe("A photographer");
+    expect(openverseCandidate(photo)?.license).toBe("CC BY-SA 2.0");
+    expect(openverseCandidate(photo)?.description).toContain("lionel richie");
+    expect(openverseCandidate({ ...photo, license: "cc0", license_version: "1.0", license_url: "" })?.license).toBe(
+      "CC0 1.0"
+    );
+    expect(openverseCandidate({ ...photo, license: "pdm", license_version: "1.0", license_url: "" })?.license).toBe(
+      "Public domain"
+    );
+    expect(openverseCandidate({ ...photo, license: "by-nc" })).toBeUndefined();
+    expect(openverseCandidate({ ...photo, creator: "" })).toBeUndefined();
+    expect(openverseCandidate({ ...photo, width: 400 })).toBeUndefined();
+    expect(openverseCandidate({ ...photo, url: "https://evil.example/x.jpg" })).toBeUndefined();
+    expect(openverseCandidate({ ...photo, foreign_landing_url: "https://evil.example/x" })).toBeUndefined();
   });
 
   test("rejects definitely later photos without treating partial archive dates as year end", () => {
@@ -672,7 +835,8 @@ describe("Time Capsule", () => {
           })
         );
       }
-      if (url.includes("commons.wikimedia.org/w/api.php"))
+      if (url.includes("commons.wikimedia.org/w/api.php")) {
+        expect(new URL(url).searchParams.get("gsrlimit")).toBe("50");
         return Promise.resolve(
           response({
             query: {
@@ -703,6 +867,7 @@ describe("Time Capsule", () => {
             },
           })
         );
+      }
       if (url === "https://thumb.wikimedia.org/0.png")
         return Promise.resolve(new Response("Rate limited", { status: 429 }));
       return Promise.resolve(

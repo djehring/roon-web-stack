@@ -25,6 +25,7 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
         }
       });
       routes.get("/", async () => listCapsules());
+      routes.get("/capabilities", () => ({ optionsVersion: 2 }));
       routes.post("/", async (request, reply) => {
         let input;
         try {

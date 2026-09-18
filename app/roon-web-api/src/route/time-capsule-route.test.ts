@@ -21,6 +21,49 @@ describe("Time Capsule routes", () => {
   beforeEach(() => {
     jest.mocked(clientManager.get).mockImplementation(() => ({}) as ReturnType<typeof clientManager.get>);
   });
+  test("advertises options support only to paired clients", async () => {
+    const app = await server();
+    try {
+      expect((await app.inject("/paired/time-capsules/capabilities")).json()).toEqual({ optionsVersion: 2 });
+      jest.mocked(clientManager.get).mockImplementation(() => {
+        throw new Error("Not registered");
+      });
+      expect((await app.inject("/unknown/time-capsules/capabilities")).statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+  test("passes the selected topics and presentation to preparation", async () => {
+    jest.mocked(startCapsule).mockResolvedValue({ id: "job", status: "researching" });
+    const options = {
+      mode: "work",
+      topics: ["composer", "manuscripts"],
+      subject: "Beethoven Symphony No. 6",
+      region: "GB",
+      workContext: "composition",
+      captions: "none",
+      motion: "kenBurns",
+      pace: "relaxed",
+      order: "chronological",
+    };
+    const app = await server();
+    try {
+      const result = await app.inject({
+        method: "POST",
+        url: "/paired/time-capsules/",
+        payload: {
+          query: "Beethoven Symphony No. 6",
+          requestedAt: "2026-09-18T00:00:00Z",
+          tracks: [{ artist: "Orchestra", track: "I. Allegro" }],
+          options,
+        },
+      });
+      expect(result.statusCode).toBe(202);
+      expect(jest.mocked(startCapsule).mock.calls[0][0].options).toEqual(options);
+    } finally {
+      await app.close();
+    }
+  });
   test("rejects an unpaired client before returning the saved library", async () => {
     jest.mocked(clientManager.get).mockImplementation(() => {
       throw new Error("Not registered");
