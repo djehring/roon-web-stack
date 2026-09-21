@@ -34,7 +34,7 @@ async function bounded<T>(work: Promise<T>): Promise<T | undefined> {
 export async function cinemaAlbumCover(track: CapsuleTrack) {
   const zoneId = zoneManager.zones()[0]?.zone_id;
   if (!zoneId) return undefined;
-  const imageKey = await cinemaArtwork(zoneId, [track]);
+  const imageKey = track.imageKey || (await cinemaArtwork(zoneId, [track]));
   if (!imageKey) return undefined;
   const result = await bounded(
     roon.getImage(imageKey, { format: "image/jpeg", width: 1600, height: 1600, scale: "fit" })
@@ -53,6 +53,8 @@ export async function cinemaAlbumCover(track: CapsuleTrack) {
 
 /** A serialized, separate browse session cannot reset a user's browsing or playback lookup. */
 export function cinemaArtwork(zoneId: string, tracks: CapsuleTrack[]): Promise<string | null> {
+  const imageKey = tracks.find((track) => track.imageKey)?.imageKey;
+  if (imageKey) return Promise.resolve(imageKey);
   const key = JSON.stringify([zoneId, tracks.map(({ artist, album }) => [artist, album])]);
   const result = lookups.then(async () => {
     const cached = covers.get(key);

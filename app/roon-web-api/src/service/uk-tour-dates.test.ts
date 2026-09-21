@@ -239,6 +239,14 @@ describe("uk-tour-dates", () => {
   });
 
   describe("fetchUKTourDates", () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ now: new Date("2026-09-01T12:00:00Z") });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it("returns an empty list when Last.fm has no artist page", async () => {
       mockedAxios.get.mockResolvedValue({ status: 404, data: "" });
 

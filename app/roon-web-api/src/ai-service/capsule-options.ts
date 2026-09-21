@@ -17,7 +17,8 @@ export const capsuleTopics = {
 } as const;
 export type CapsuleTopic = keyof typeof capsuleTopics;
 export interface CapsuleOptions {
-  mode: "period" | "artist" | "work";
+  mode: "period" | "artist" | "work" | "artwork";
+  subjectIsExplicit?: boolean;
   topics: CapsuleTopic[];
   subject: string;
   region: string;
@@ -25,6 +26,7 @@ export interface CapsuleOptions {
   periodEnd?: string;
   workContext: "composition" | "recording";
   captions: "none" | "brief" | "detailed";
+  showTrackTitle?: boolean;
   motion: "still" | "gentle" | "kenBurns";
   pace: "relaxed" | "standard" | "lively";
   order: "curated" | "chronological" | "shuffled";
@@ -47,13 +49,19 @@ function isoDate(value: unknown): string {
 export function validateCapsuleOptions(value: unknown): CapsuleOptions {
   if (!value || typeof value !== "object") throw new Error("Invalid Cinema options.");
   const input = value as Record<string, unknown>;
-  const mode = choice(input.mode, ["period", "artist", "work"] as const);
+  if (input.showTrackTitle !== undefined && typeof input.showTrackTitle !== "boolean") {
+    throw new Error("Choose whether to show the track title.");
+  }
+  const mode = choice(input.mode, ["period", "artist", "work", "artwork"] as const);
   if (!Array.isArray(input.topics) || !input.topics.length || input.topics.length > 14) {
     throw new Error("Choose at least one Cinema topic.");
   }
   const topics = [
     ...new Set(input.topics.map((topic) => choice(topic, Object.keys(capsuleTopics) as CapsuleTopic[]))),
   ].sort();
+  if (mode === "artwork" && (topics.length !== 1 || topics[0] !== "albumCovers")) {
+    throw new Error("Album artwork uses the covers from your selected music.");
+  }
   if (typeof input.subject !== "string" || !input.subject.trim() || input.subject.length > 2000) {
     throw new Error("Provide the subject for your montage.");
   }
@@ -65,12 +73,14 @@ export function validateCapsuleOptions(value: unknown): CapsuleOptions {
   }
   return {
     mode,
+    ...(input.subjectIsExplicit === true ? { subjectIsExplicit: true } : {}),
     topics,
     subject: input.subject.trim(),
     region: input.region,
     ...(periodStart ? { periodStart, periodEnd } : {}),
     workContext: choice(input.workContext, ["composition", "recording"]),
     captions: choice(input.captions, ["none", "brief", "detailed"]),
+    ...(typeof input.showTrackTitle === "boolean" ? { showTrackTitle: input.showTrackTitle } : {}),
     motion: choice(input.motion, ["still", "gentle", "kenBurns"]),
     pace: choice(input.pace, ["relaxed", "standard", "lively"]),
     order: choice(input.order, ["curated", "chronological", "shuffled"]),
@@ -88,8 +98,8 @@ An artist montage follows the requested subject and its actual geography; its re
 For a musical work, distinguish composition/premiere history from the recording's release date.
 The selected work focus is ${options.workContext}. A compilation release date must never define an artist's career period.
 Do not assume a historical period where none was requested. Do not invent dates for portraits, places or musical explanations.
-Use selected track artists as the canonical artist identity. For work mode, use the artist/composer and track titles together to identify the work; movement titles belong to their parent concerto, symphony or other work.
-The explicit subject adds context but must not replace a clear identity from the soundtrack with search wording such as "greatest hits", "best of" or "playlist".
+${options.subjectIsExplicit ? "Use the explicitly chosen subject even when the soundtrack contains other artists. The soundtrack is independently editable." : "Use selected track artists as the canonical artist identity."} For work mode, use the artist/composer and track titles together to identify the work; movement titles belong to their parent concerto, symphony or other work.
+${options.subjectIsExplicit ? "The chosen subject is independent of soundtrack edits. Use the tracks only as supporting context when they concern that subject." : 'The explicit subject adds context but must not replace a clear identity from the soundtrack with search wording such as "greatest hits", "best of" or "playlist".'}
 Period headlines, sport and everyday-life research must not become music chart research. Optional artist images use the selected soundtrack's performers.
 When artistImages is selected, plan portraits or performance photographs of the artist. Do not require a particular copyrighted studio portrait, named photographer, museum catalogue item or album-cover session. The picture stage will use genuinely reusable archive photographs and caption each from its own metadata; do not invent a photo date or session.
 Album covers are supplied directly by Roon in a separate stage. Never research, compile scenes for, or search the web for album covers.

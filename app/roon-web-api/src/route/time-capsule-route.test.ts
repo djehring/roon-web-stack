@@ -9,17 +9,25 @@ import {
   readCapsule,
   startCapsule,
   updateCapsule,
+  updateCinemaContent,
 } from "../ai-service/time-capsule";
 import { cinemaArtwork } from "../service/cinema-artwork";
+import { browseCinemaMusic, captureCinemaQueue, importCinemaMusic } from "../service/cinema-music";
 import { registerTimeCapsuleRoutes } from "./time-capsule-route";
 
 jest.mock("../service/cinema-artwork", () => ({ cinemaArtwork: jest.fn() }));
+jest.mock("../service/cinema-music", () => ({
+  browseCinemaMusic: jest.fn(),
+  importCinemaMusic: jest.fn(),
+  captureCinemaQueue: jest.fn(),
+}));
 jest.mock("@service", () => ({ clientManager: { get: jest.fn() } }));
 jest.mock("../ai-service/time-capsule", () => ({
   ...jest.requireActual<typeof import("../ai-service/time-capsule")>("../ai-service/time-capsule"),
   capsuleJob: jest.fn(),
   startCapsule: jest.fn(),
   updateCapsule: jest.fn(),
+  updateCinemaContent: jest.fn(),
   deleteCapsule: jest.fn(),
   listCapsules: jest.fn(),
   readCapsule: jest.fn(),
@@ -41,11 +49,82 @@ describe("Time Capsule routes", () => {
       expect((await app.inject("/paired/time-capsules/capabilities")).json()).toEqual({
         optionsVersion: 2,
         managementVersion: 1,
+        musicVersion: 1,
+        maxTracks: 1000,
       });
       jest.mocked(clientManager.get).mockImplementation(() => {
         throw new Error("Not registered");
       });
       expect((await app.inject("/unknown/time-capsules/capabilities")).statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+  test("music import, browse and queue endpoints require pairing and preserve source selections", async () => {
+    const app = await server();
+    const path = { hierarchy: "albums" as const, steps: [{ title: "Album", index: 0 }] };
+    const tracks = [{ artist: "Artist", track: "Song", album: "Album", entryId: "one" }];
+    jest.mocked(importCinemaMusic).mockResolvedValue(tracks);
+    jest.mocked(browseCinemaMusic).mockResolvedValue({ title: "Album", kind: "album", path, items: [] });
+    jest
+      .mocked(captureCinemaQueue)
+      .mockResolvedValue({ title: "Room queue", sourceLabel: "Room", tracks, includesCurrent: true });
+    try {
+      const imported = await app.inject({
+        method: "POST",
+        url: "/paired/time-capsules/music/import",
+        payload: { path, zoneId: "room" },
+      });
+      expect(imported.json()).toEqual({ tracks });
+      expect(importCinemaMusic).toHaveBeenCalledWith(path, "room");
+      expect(
+        (await app.inject({ method: "POST", url: "/paired/time-capsules/music/browse", payload: { path } })).statusCode
+      ).toBe(200);
+      expect(
+        (await app.inject({ method: "POST", url: "/paired/time-capsules/music/queue", payload: { zoneId: "room" } }))
+          .statusCode
+      ).toBe(200);
+      expect(
+        (await app.inject({ method: "POST", url: "/paired/time-capsules/music/queue", payload: {} })).statusCode
+      ).toBe(400);
+      jest.mocked(clientManager.get).mockImplementation(() => {
+        throw new Error("Unpaired");
+      });
+      expect(
+        (await app.inject({ method: "POST", url: "/unknown/time-capsules/music/import", payload: { path } })).statusCode
+      ).toBe(403);
+      expect(importCinemaMusic).toHaveBeenCalledTimes(1);
+      expect(startCapsule).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("content saves forward their revision and return a conflict without discarding the draft", async () => {
+    const app = await server();
+    const request = {
+      query: "Original",
+      requestedAt: "2026-09-21T10:00:00.000Z",
+      locale: "en_GB",
+      timeZone: "Europe/London",
+      title: "Evening",
+      tracks: [{ artist: "Artist", track: "Song", album: "Album" }],
+    };
+    const payload = { request, baseRevision: 2, mutationId: "mutation-1234567890" };
+    jest.mocked(updateCinemaContent).mockResolvedValue({ id: "saved", status: "ready" });
+    try {
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/saved/content", payload })).statusCode
+      ).toBe(200);
+      expect(updateCinemaContent).toHaveBeenCalledWith("saved", request, 2, payload.mutationId);
+      jest.mocked(updateCinemaContent).mockRejectedValue(new CapsuleConflict("Changed on another device"));
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/saved/content", payload })).statusCode
+      ).toBe(409);
+      expect(
+        (await app.inject({ method: "PUT", url: "/paired/time-capsules/saved/content", payload: { request } }))
+          .statusCode
+      ).toBe(400);
     } finally {
       await app.close();
     }
@@ -101,9 +180,7 @@ describe("Time Capsule routes", () => {
     });
     const app = await server();
     try {
-      const result = await app.inject(
-        "/paired/time-capsules/jobs/saved?generation=run-2"
-      );
+      const result = await app.inject("/paired/time-capsules/jobs/saved?generation=run-2");
       expect(capsuleJob).toHaveBeenCalledWith("saved", "run-2");
       expect(result.json<{ status: string }>().status).toBe("failed");
     } finally {

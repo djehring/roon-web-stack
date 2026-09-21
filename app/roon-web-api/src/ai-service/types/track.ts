@@ -1,4 +1,9 @@
+import type { CinemaMusicPath } from "../../service/cinema-music-model";
+
 export interface Track {
+  roonPath?: CinemaMusicPath;
+  matchPolicy?: "exact";
+  imageKey?: string;
   artist: string;
   track: string;
   album: string;

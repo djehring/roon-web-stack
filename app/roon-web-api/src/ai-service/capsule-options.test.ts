@@ -38,6 +38,8 @@ describe("Cinema options", () => {
     { topics: ["madeUp"] },
     { mode: "photos" },
     { captions: "madeUp" },
+    { showTrackTitle: "true" },
+    { showTrackTitle: null },
     { motion: "madeUp" },
     { pace: "madeUp" },
     { order: "madeUp" },
@@ -48,6 +50,12 @@ describe("Cinema options", () => {
     { periodStart: "1984-12-31", periodEnd: "1984-01-01" },
   ])("rejects invalid options: %j", (invalid) => {
     expect(() => validateCapsuleOptions({ ...cinemaOptions(), ...invalid })).toThrow();
+  });
+  test("preserves the track title choice while accepting older options", () => {
+    expect(validateCapsuleOptions(cinemaOptions()).showTrackTitle).toBeUndefined();
+    for (const showTrackTitle of [true, false]) {
+      expect(validateCapsuleOptions({ ...cinemaOptions(), showTrackTitle }).showTrackTitle).toBe(showTrackTitle);
+    }
   });
   test("presets allow additional topics without changing mode", () => {
     const options = validateCapsuleOptions({

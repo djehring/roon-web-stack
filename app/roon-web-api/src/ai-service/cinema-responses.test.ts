@@ -1,20 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import {
-  cinemaProgress,
-  cinemaResponse,
-  withCinemaResponses,
-} from "./cinema-responses";
+import { cinemaProgress, cinemaResponse, withCinemaResponses } from "./cinema-responses";
 
 jest.mock("node:timers/promises", () => ({
   setTimeout: jest.fn().mockResolvedValue(undefined),
 }));
 
-const completed = () =>
-  new Response(JSON.stringify({ status: "completed", output: [] }));
-const timeout = () =>
-  new DOMException("The operation was aborted due to timeout", "TimeoutError");
+const completed = () => new Response(JSON.stringify({ status: "completed", output: [] }));
+const timeout = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
 const body = (topic: string) => ({
   input: `Bowie greatest hits: ${topic}`,
   tools: [{ type: "web_search" }],
@@ -37,9 +31,7 @@ describe("Cinema research timeouts", () => {
         directory,
         progress: async (message) => {
           writes.push(`start:${message}`);
-          await new Promise((resolve) =>
-            setTimeout(resolve, message === "first" ? 20 : 0)
-          );
+          await new Promise((resolve) => setTimeout(resolve, message === "first" ? 20 : 0));
           writes.push(`end:${message}`);
         },
       },
@@ -47,12 +39,7 @@ describe("Cinema research timeouts", () => {
         await Promise.all([cinemaProgress("first"), cinemaProgress("second")]);
       }
     );
-    expect(writes).toEqual([
-      "start:first",
-      "end:first",
-      "start:second",
-      "end:second",
-    ]);
+    expect(writes).toEqual(["start:first", "end:first", "start:second", "end:second"]);
   });
 
   test("web research has a longer initial budget, retries once and reports its stage", async () => {
@@ -61,21 +48,13 @@ describe("Cinema research timeouts", () => {
       .mockRejectedValueOnce(timeout())
       .mockResolvedValueOnce(completed());
     const budgets = jest.spyOn(AbortSignal, "timeout");
-    const progress = jest
-      .fn<Promise<void>, [string]>()
-      .mockResolvedValue(undefined);
+    const progress = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
     const result = await withCinemaResponses({ directory, progress }, () =>
-      cinemaResponse(
-        body("portraits"),
-        "test-key",
-        "Researching artist pictures"
-      )
+      cinemaResponse(body("portraits"), "test-key", "Researching artist pictures")
     );
     expect(result.status).toBe("completed");
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(budgets.mock.calls.map(([budget]) => budget)).toEqual([
-      300_000, 300_000,
-    ]);
+    expect(budgets.mock.calls.map(([budget]) => budget)).toEqual([300_000, 300_000]);
     expect(progress.mock.calls.map(([message]) => message)).toEqual([
       "Researching artist pictures…",
       "Researching artist pictures — retrying a slow connection…",
@@ -92,15 +71,9 @@ describe("Cinema research timeouts", () => {
     const research = () =>
       withCinemaResponses(context, async () => {
         await cinemaResponse(body("career"), "test-key", "Researching career");
-        return cinemaResponse(
-          body("portraits"),
-          "test-key",
-          "Researching artist pictures"
-        );
+        return cinemaResponse(body("portraits"), "test-key", "Researching artist pictures");
       });
-    await expect(research()).rejects.toThrow(
-      "Researching artist pictures timed out after a retry"
-    );
+    await expect(research()).rejects.toThrow("Researching artist pictures timed out after a retry");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(await fs.readdir(directory)).toHaveLength(1);
     fetchMock.mockResolvedValueOnce(completed());
@@ -113,12 +86,7 @@ describe("Cinema research timeouts", () => {
         }
       ).input
     ).toContain("portraits");
-    expect(
-      await fs.readFile(
-        path.join(directory, (await fs.readdir(directory))[0]),
-        "utf8"
-      )
-    ).not.toContain("test-key");
+    expect(await fs.readFile(path.join(directory, (await fs.readdir(directory))[0]), "utf8")).not.toContain("test-key");
   });
 
   test("transient HTTP errors retry, but credentials and incomplete responses fail immediately", async () => {
@@ -126,40 +94,28 @@ describe("Cinema research timeouts", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response("Unavailable", { status: 503 }))
       .mockResolvedValueOnce(completed());
-    await expect(
-      cinemaResponse(body("career"), "test-key", "Researching career")
-    ).resolves.toMatchObject({ status: "completed" });
+    await expect(cinemaResponse(body("career"), "test-key", "Researching career")).resolves.toMatchObject({
+      status: "completed",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { message: "Invalid key" } }), {
         status: 401,
       })
     );
-    await expect(
-      cinemaResponse(body("career"), "test-key", "Researching career")
-    ).rejects.toThrow("HTTP 401");
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ status: "incomplete" }))
+    await expect(cinemaResponse(body("career"), "test-key", "Researching career")).rejects.toThrow("HTTP 401");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: "incomplete" })));
+    await expect(cinemaResponse(body("career"), "test-key", "Researching career")).rejects.toThrow(
+      "Research did not complete"
     );
-    await expect(
-      cinemaResponse(body("career"), "test-key", "Researching career")
-    ).rejects.toThrow("Research did not complete");
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   test("structured output stays uncached until its caller validates the draft", async () => {
-    const fetchMock = jest
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(() => Promise.resolve(completed()));
+    const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(completed()));
     const compile = () =>
-      withCinemaResponses(
-        { directory, progress: () => Promise.resolve() },
-        () =>
-          cinemaResponse(
-            { input: "compile", text: { format: { type: "json_object" } } },
-            "test-key",
-            "Preparing stories"
-          )
+      withCinemaResponses({ directory, progress: () => Promise.resolve() }, () =>
+        cinemaResponse({ input: "compile", text: { format: { type: "json_object" } } }, "test-key", "Preparing stories")
       );
     await compile();
     await compile();

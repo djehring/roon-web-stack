@@ -64,15 +64,15 @@ function albumTracks(request: CapsuleRequest) {
   const albums = new Set<string>();
   return request.tracks.filter((track) => {
     const album = track.album.trim();
-    const key = JSON.stringify([normalized(track.artist), normalized(album)]);
-    return album && !albums.has(key) && albums.add(key);
+    const key = track.imageKey || JSON.stringify([normalized(track.artist), normalized(album)]);
+    return (album || track.imageKey) && !albums.has(key) && albums.add(key);
   });
 }
 
 function albumCoverScene(track: CapsuleRequest["tracks"][number], image: CapsuleImage, index: number): CapsuleScene {
   return {
     id: `roon-cover-${index}`,
-    title: `${track.artist} — ${track.album}`,
+    title: `${track.artist} — ${track.album || track.track}`,
     body: "",
     dateLabel: "Roon library artwork",
     scope: "Music",

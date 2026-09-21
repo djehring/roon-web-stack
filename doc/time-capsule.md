@@ -1,12 +1,48 @@
 # Time Capsule API
 
+## Editable music snapshots
+
+`GET /capabilities` also advertises `musicVersion:1` and `maxTracks:1000`.
+Paired clients can import music without executing playback actions:
+
+- `POST /music/browse` with `{path, zoneId?}` returns collection metadata and child paths.
+- `POST /music/import` with the same body returns `{tracks}` in source order, including repeats.
+- `POST /music/queue` with `{zoneId}` returns `{title, sourceLabel, tracks, includesCurrent}`.
+- `PUT /:id/content` with `{request, baseRevision, mutationId}` saves name, music and
+  presentation immediately when picture content is unchanged; topic/context changes
+  return a generation job. Stale revisions return 409. Mutation retries are idempotent.
+
+Soundtracks contain 1–1,000 tracks. Imports paginate beyond the ordinary browse/queue
+windows, reject partial captures and use isolated sessions. Track occurrence IDs
+preserve repeated songs independently. `roonPath` stores a verified browse route rather
+than expiring item keys; `imageKey`, `durationSeconds` and `matchPolicy:"exact"` are optional.
+Exact playback uses the selected recording or reports it unavailable; it never silently
+substitutes an AI-corrected recording. `POST /play-tracks` accepts `cinema:true` to disable
+shuffle and keep the saved order. Import endpoints do not call it.
+
+Requests may include `title`, `sourceLabel` and `clientRequestId`. Shared items use
+`revision`/`lastMutationId`; picture completion preserves music edits made during its
+build. Background cover refresh does not invalidate a content revision. Original query
+and requested-at context remain anchored. Research receives at most 40 sample tracks,
+independently of the full saved soundtrack.
+
+The new `artwork` mode requires only the `albumCovers` topic and no OpenAI key. An
+explicitly chosen visual subject (`subjectIsExplicit:true`) stays independent of changes
+to soundtrack artists. Personal-photo items use the same music editor but remain local.
+
 ## Adaptive Cinema options
 
-The native setup can now choose a period, artist or musical-work companion. Authenticated
-`GET /capabilities` returns `{optionsVersion:2, managementVersion:1}`; clients check options support before creation and management support before editing or deleting.
-The original query, timestamp and soundtrack are preserved. An optional `options` object carries:
+`options.showTrackTitle` is an optional boolean, defaulting to false for older items.
+It controls the persistent current-track title and artist independently of picture
+captions. `options.motion` accepts `still`, `gentle` and `kenBurns`. Both are presentation
+choices: content saves reuse pictures, and in-flight picture generation preserves
+later presentation edits.
 
-- `mode`: `period`, `artist` or `work`.
+The native setup can now choose a period, artist or musical-work companion. Authenticated
+`GET /capabilities` returns `{optionsVersion:2, managementVersion:1, musicVersion:1, maxTracks:1000}`; clients check options support before creation and management support before editing or deleting.
+The original query and timestamp remain anchored; soundtrack changes use the content endpoint. An optional `options` object carries:
+
+- `mode`: `period`, `artist`, `work` or `artwork`.
 - `topics`: validated topic IDs; at least one is required. Modes suggest defaults but allow extra topics.
 - `subject`, `region` and optional inclusive ISO `periodStart` / `periodEnd`.
 - `workContext`: `composition` or `recording`.

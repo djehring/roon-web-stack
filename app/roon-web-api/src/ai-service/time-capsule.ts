@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { logger } from "../infrastructure";
 import { cinemaAlbumCover } from "../service/cinema-artwork";
+import { CinemaMusicPath, cinemaTrackLimit, validateMusicPath } from "../service/cinema-music-model";
 import { openaiKeyStore } from "../service/openai-key-store";
 import {
   capsuleContentInstructions,
@@ -25,6 +26,11 @@ export interface CapsuleTrack {
   artist: string;
   track: string;
   album: string;
+  entryId?: string;
+  imageKey?: string;
+  durationSeconds?: number;
+  roonPath?: CinemaMusicPath;
+  matchPolicy?: "exact";
 }
 export interface CapsuleRequest {
   query: string;
@@ -33,6 +39,9 @@ export interface CapsuleRequest {
   timeZone: string;
   tracks: CapsuleTrack[];
   options?: CapsuleOptions;
+  title?: string;
+  sourceLabel?: string;
+  clientRequestId?: string;
 }
 export interface CapsuleSource {
   title: string;
@@ -63,6 +72,8 @@ export interface CapsuleScene {
   eventStart?: string;
 }
 export interface TimeCapsule {
+  revision?: number;
+  lastMutationId?: string;
   generation?: string;
   researchVersion?: number;
   id: string;
@@ -77,6 +88,8 @@ export interface TimeCapsule {
   notices?: string[];
 }
 export interface CapsuleJob {
+  mutationId?: string;
+  baseRevision?: number;
   message?: string;
   generation?: string;
   id: string;
@@ -92,6 +105,17 @@ export interface CapsulePeriod {
 const root = () => process.env.TIME_CAPSULE_CACHE_DIR || path.join(process.cwd(), "cache", "time-capsules");
 const jobs = new Map<string, CapsuleJob>();
 const deleting = new Set<string>();
+const itemWrites = new Map<string, Promise<unknown>>();
+function withItemLock<T>(id: string, operation: () => Promise<T>): Promise<T> {
+  const result = (itemWrites.get(id) ?? Promise.resolve()).then(operation, operation);
+  itemWrites.set(id, result);
+  void result
+    .finally(() => {
+      if (itemWrites.get(id) === result) itemWrites.delete(id);
+    })
+    .catch(() => undefined);
+  return result;
+}
 let associationWrites = Promise.resolve();
 function withAssociationLock<T>(work: () => Promise<T>): Promise<T> {
   const result = associationWrites.then(work);
@@ -130,23 +154,41 @@ export function validateCapsuleRequest(value: unknown): CapsuleRequest {
     text(input.query, 2001).length > 2000 ||
     !Array.isArray(input.tracks) ||
     input.tracks.length < 1 ||
-    input.tracks.length > 100 ||
+    input.tracks.length > cinemaTrackLimit ||
     typeof input.requestedAt !== "string" ||
     !Number.isFinite(Date.parse(input.requestedAt))
   ) {
-    throw new Error("Provide the original search, its date and 1–100 selected tracks.");
+    throw new Error("Provide a music selection, its date and 1–1000 tracks.");
   }
   const tracks = input.tracks.map((value: unknown) => {
     const track = value as Partial<CapsuleTrack> | null;
     if (!track || !text(track.artist) || !text(track.track)) throw new Error("Every track needs an artist and title.");
-    return { artist: text(track.artist, 300), track: text(track.track, 300), album: text(track.album, 300) };
+    return {
+      artist: text(track.artist, 1000),
+      track: text(track.track, 1000),
+      album: text(track.album, 1000),
+      ...(track.entryId ? { entryId: text(track.entryId, 100) } : {}),
+      ...(track.imageKey ? { imageKey: text(track.imageKey, 500) } : {}),
+      ...(typeof track.durationSeconds === "number" &&
+      Number.isFinite(track.durationSeconds) &&
+      track.durationSeconds > 0
+        ? { durationSeconds: track.durationSeconds }
+        : {}),
+      ...(track.roonPath ? { roonPath: validateMusicPath(track.roonPath) } : {}),
+      ...(track.matchPolicy === "exact" ? { matchPolicy: "exact" as const } : {}),
+    };
   });
+  const entryIds = tracks.flatMap((track) => (track.entryId ? [track.entryId] : []));
+  if (new Set(entryIds).size !== entryIds.length) throw new Error("Each track occurrence needs a unique entry ID.");
   return {
     query: text(input.query, 2000),
     requestedAt: new Date(input.requestedAt).toISOString(),
     locale: text(input.locale, 80),
     timeZone: text(input.timeZone, 80),
     tracks,
+    ...(input.title === undefined ? {} : { title: text(input.title, 200) }),
+    ...(input.sourceLabel === undefined ? {} : { sourceLabel: text(input.sourceLabel, 300) }),
+    ...(input.clientRequestId === undefined ? {} : { clientRequestId: text(input.clientRequestId, 100) }),
     ...(input.options === undefined ? {} : { options: validateCapsuleOptions(input.options) }),
   };
 }
@@ -186,7 +228,8 @@ export async function listCapsules(): Promise<TimeCapsule[]> {
 export async function startCapsule(
   request: CapsuleRequest,
   rebuildId?: string,
-  preservedPeriod?: CapsulePeriod
+  preservedPeriod?: CapsulePeriod,
+  mutationId?: string
 ): Promise<CapsuleJob> {
   let id = rebuildId || capsuleKey(request);
   if (!validId(id)) throw new Error("Invalid capsule identifier.");
@@ -203,6 +246,8 @@ export async function startCapsule(
     }
   }
   if (deleting.has(id)) throw new CapsuleConflict("This Cinema item is being deleted. Please refresh the library.");
+  const baseRevision = (await readCapsule(id))?.revision ?? 0;
+  if (deleting.has(id)) throw new CapsuleConflict("This Cinema item is being deleted. Please refresh the library.");
   const existing = jobs.get(id);
   if (existing && ["researching", "images"].includes(existing.status)) return existing;
   if (!coversOnly(request) && !apiKey()) throw new Error("Add an OpenAI API key in Settings to create a Time Capsule.");
@@ -211,7 +256,13 @@ export async function startCapsule(
   }
   // Completed jobs live on disk. Bound transient status retention.
   for (const [key, job] of jobs) if (["ready", "failed"].includes(job.status)) jobs.delete(key);
-  const job: CapsuleJob = { id, status: "researching", generation: randomUUID() };
+  const job: CapsuleJob = {
+    id,
+    status: "researching",
+    generation: randomUUID(),
+    baseRevision,
+    ...(mutationId ? { mutationId } : {}),
+  };
   jobs.set(id, job);
   try {
     // The saved montage and the in-flight build have separate identities.
@@ -267,61 +318,203 @@ export async function capsuleJob(id: string, generation?: string): Promise<Capsu
 
 export class CapsuleConflict extends Error {}
 
+const visualContent = (options?: CapsuleOptions) =>
+  options
+    ? JSON.stringify({
+        mode: options.mode,
+        subject: options.subject,
+        topics: [...options.topics].sort(),
+        region: options.region,
+        periodStart: options.periodStart,
+        periodEnd: options.periodEnd,
+        workContext: options.workContext,
+      })
+    : "legacy";
+const coverSelection = (tracks: CapsuleTrack[]) =>
+  JSON.stringify(
+    [...new Set(tracks.map((track) => track.imageKey || JSON.stringify([track.artist, track.album])))].sort()
+  );
+
+/** Fast, optimistic editing of the saved programme, independent of room playback. */
+export async function updateCinemaContent(
+  id: string,
+  request: CapsuleRequest,
+  baseRevision: number,
+  mutationId: string
+): Promise<CapsuleJob | undefined> {
+  return withItemLock(id, async () => {
+    const saved = await readCapsule(id);
+    if (!saved) return undefined;
+    const active = jobs.get(id);
+    if (active?.mutationId === mutationId && active.status !== "ready") return active;
+    if (saved.lastMutationId === mutationId) return { id, status: "ready", capsule: saved };
+    if (deleting.has(id) || (saved.revision ?? 0) !== baseRevision) {
+      throw new CapsuleConflict(
+        "This Cinema item changed on another device. Your draft is safe; reload it or save a new Cinema item."
+      );
+    }
+    if (request.query !== saved.request.query || request.requestedAt !== saved.request.requestedAt) {
+      throw new Error("Editing music must preserve the original Cinema context.");
+    }
+    if (visualContent(request.options) !== visualContent(saved.request.options)) {
+      if (active && ["researching", "images"].includes(active.status)) {
+        throw new CapsuleConflict(
+          "Pictures are already updating. Save your music separately, or wait before changing picture topics."
+        );
+      }
+      const job = await startCapsule(
+        request,
+        id,
+        request.options?.subject === saved.request.options?.subject &&
+          request.options?.mode === saved.request.options?.mode &&
+          request.options?.periodStart === saved.request.options?.periodStart &&
+          request.options?.periodEnd === saved.request.options?.periodEnd
+          ? { periodStart: saved.periodStart, periodEnd: saved.periodEnd }
+          : undefined,
+        mutationId
+      );
+      return job;
+    }
+    const updated: TimeCapsule = {
+      ...saved,
+      request,
+      title: request.title || saved.title,
+      revision: (saved.revision ?? 0) + 1,
+      lastMutationId: mutationId,
+    };
+    updated.scenes = remapTrackScenes(saved.scenes, saved.request.tracks, request.tracks);
+    if (saved.request.options?.order !== request.options?.order) orderScenes(updated);
+    await atomicJSON(path.join(root(), `${id}.json`), updated);
+    if (active?.status === "ready") active.capsule = updated;
+    if (
+      request.options?.topics.includes("albumCovers") &&
+      coverSelection(saved.request.tracks) !== coverSelection(request.tracks) &&
+      !["researching", "images"].includes(active?.status ?? "")
+    ) {
+      void refreshMusicCovers(updated).catch((error: unknown) => {
+        logger.warn({ err: error, capsuleId: id }, "Cinema cover refresh failed");
+      });
+    }
+    return { id, status: "ready", capsule: updated };
+  });
+}
+
+function remapTrackScenes(scenes: CapsuleScene[], before: CapsuleTrack[], after: CapsuleTrack[]): CapsuleScene[] {
+  const metadata = (track: CapsuleTrack) => JSON.stringify([track.artist, track.track, track.album]);
+  const used = new Set<number>();
+  const mapping = before.map((track) => {
+    const next = after.findIndex(
+      (candidate, index) =>
+        !used.has(index) &&
+        (track.entryId ? candidate.entryId === track.entryId : metadata(candidate) === metadata(track))
+    );
+    if (next >= 0) used.add(next);
+    return next;
+  });
+  return scenes.map((scene) => ({
+    ...scene,
+    trackIndices: scene.trackIndices.flatMap((index) =>
+      index >= 0 && index < mapping.length && mapping[index] >= 0 ? [mapping[index]] : []
+    ),
+  }));
+}
+
+function orderScenes(capsule: TimeCapsule) {
+  if (capsule.request.options?.order === "chronological") {
+    capsule.scenes.sort((a, b) =>
+      (a.eventStart || a.dateLabel || "9999").localeCompare(b.eventStart || b.dateLabel || "9999")
+    );
+  } else if (capsule.request.options?.order === "shuffled") {
+    for (let index = capsule.scenes.length - 1; index > 0; index--) {
+      const other = Math.floor(Math.random() * (index + 1));
+      [capsule.scenes[index], capsule.scenes[other]] = [capsule.scenes[other], capsule.scenes[index]];
+    }
+  }
+}
+
+async function refreshMusicCovers(saved: TimeCapsule) {
+  const updated = structuredClone(saved);
+  await attachRoonAlbumCovers(updated, saveRoonAlbumCover);
+  await withItemLock(saved.id, async () => {
+    const latest = await readCapsule(saved.id);
+    if (
+      !latest ||
+      deleting.has(saved.id) ||
+      coverSelection(latest.request.tracks) !== coverSelection(saved.request.tracks) ||
+      visualContent(latest.request.options) !== visualContent(saved.request.options)
+    )
+      return;
+    const covers = updated.scenes.filter((scene) => scene.topic === "albumCovers");
+    if (!covers.length) return;
+    latest.scenes = [
+      ...latest.scenes.filter((scene) => scene.topic !== "albumCovers"),
+      ...remapTrackScenes(covers, saved.request.tracks, latest.request.tracks),
+    ];
+    await atomicJSON(path.join(root(), `${saved.id}.json`), latest);
+    const job = jobs.get(saved.id);
+    if (job?.status === "ready") job.capsule = latest;
+  });
+}
+
 /** Change visual options without changing the saved soundtrack or identity. */
 export async function updateCapsule(id: string, options: CapsuleOptions): Promise<CapsuleJob | undefined> {
-  const capsule = await readCapsule(id);
-  if (!capsule) return undefined;
-  const active = jobs.get(id);
-  if (deleting.has(id) || (active && ["researching", "images"].includes(active.status))) {
-    throw new CapsuleConflict("This Cinema item is already updating. Wait for it to finish before editing.");
-  }
-  const previous = capsule.request.options;
-  // Changing presentation/topics must not move an anchored historical period.
-  // A new subject, mode or explicit dates asks the researcher to resolve it again.
-  const sameContext =
-    previous?.mode === options.mode &&
-    previous.subject === options.subject &&
-    previous.periodStart === options.periodStart &&
-    previous.periodEnd === options.periodEnd;
-  return startCapsule(
-    { ...capsule.request, options },
-    id,
-    sameContext
-      ? {
-          periodStart: capsule.periodStart,
-          periodEnd: capsule.periodEnd,
-        }
-      : undefined
-  );
+  return withItemLock(id, async () => {
+    const capsule = await readCapsule(id);
+    if (!capsule) return undefined;
+    const active = jobs.get(id);
+    if (deleting.has(id) || (active && ["researching", "images"].includes(active.status))) {
+      throw new CapsuleConflict("This Cinema item is already updating. Wait for it to finish before editing.");
+    }
+    const previous = capsule.request.options;
+    // Changing presentation/topics must not move an anchored historical period.
+    // A new subject, mode or explicit dates asks the researcher to resolve it again.
+    const sameContext =
+      previous?.mode === options.mode &&
+      previous.subject === options.subject &&
+      previous.periodStart === options.periodStart &&
+      previous.periodEnd === options.periodEnd;
+    return startCapsule(
+      { ...capsule.request, options },
+      id,
+      sameContext
+        ? {
+            periodStart: capsule.periodStart,
+            periodEnd: capsule.periodEnd,
+          }
+        : undefined
+    );
+  });
 }
 
 /** Remove the manifest and associations; cached images may belong to other items. */
 export async function deleteCapsule(id: string): Promise<void> {
   if (!validId(id)) return;
-  const active = jobs.get(id);
-  if (deleting.has(id) || (active && ["researching", "images"].includes(active.status))) {
-    throw new CapsuleConflict("This Cinema item is updating. Wait for it to finish before deleting.");
-  }
-  deleting.add(id);
-  try {
-    await fs.mkdir(root(), { recursive: true });
-    // Hide the item first. A retry also cleans up associations after partial failure.
-    await fs.rm(path.join(root(), `${id}.json`), { force: true });
-    jobs.delete(id);
-    await fs.rm(path.join(root(), `draft-${id}.json`), { force: true });
-    await fs.rm(path.join(root(), `job-${id}.json`), { force: true });
-    await fs.rm(path.join(root(), `progress-${id}`), { recursive: true, force: true });
-    await withAssociationLock(async () => {
-      const names = (await fs.readdir(root())).filter((name) => /^zone-[a-f0-9]{64}\.json$/.test(name));
-      for (const name of names) {
-        const file = path.join(root(), name);
-        const association = JSON.parse(await fs.readFile(file, "utf8")) as { capsuleId?: string };
-        if (association.capsuleId === id) await fs.rm(file, { force: true });
-      }
-    });
-  } finally {
-    deleting.delete(id);
-  }
+  return withItemLock(id, async () => {
+    const active = jobs.get(id);
+    if (deleting.has(id) || (active && ["researching", "images"].includes(active.status))) {
+      throw new CapsuleConflict("This Cinema item is updating. Wait for it to finish before deleting.");
+    }
+    deleting.add(id);
+    try {
+      await fs.mkdir(root(), { recursive: true });
+      // Hide the item first. A retry also cleans up associations after partial failure.
+      await fs.rm(path.join(root(), `${id}.json`), { force: true });
+      jobs.delete(id);
+      await fs.rm(path.join(root(), `draft-${id}.json`), { force: true });
+      await fs.rm(path.join(root(), `job-${id}.json`), { force: true });
+      await fs.rm(path.join(root(), `progress-${id}`), { recursive: true, force: true });
+      await withAssociationLock(async () => {
+        const names = (await fs.readdir(root())).filter((name) => /^zone-[a-f0-9]{64}\.json$/.test(name));
+        for (const name of names) {
+          const file = path.join(root(), name);
+          const association = JSON.parse(await fs.readFile(file, "utf8")) as { capsuleId?: string };
+          if (association.capsuleId === id) await fs.rm(file, { force: true });
+        }
+      });
+    } finally {
+      deleting.delete(id);
+    }
+  });
 }
 
 interface ResponseOutput {
@@ -894,6 +1087,7 @@ const uniqueTrackValues = (values: string[]) => [
 const parentWorkTitle = (title: string) => title.replace(/:\s*(?:[IVXLCDM]+|\d+)\.?\s+.*$/i, "").trim();
 
 export function configuredSubject(options: CapsuleOptions, tracks: CapsuleTrack[]): string {
+  if (options.subjectIsExplicit) return options.subject;
   const artists = uniqueTrackValues(tracks.map((track) => track.artist));
   if (options.mode === "artist" && artists.length === 1) return artists[0];
   if (options.mode !== "work") return options.subject;
@@ -937,7 +1131,7 @@ async function researchConfiguredCapsule(
         topic
       )
     )
-      ? { selectedMusic: request.tracks }
+      ? { selectedMusic: request.tracks.slice(0, 40), soundtrackTrackCount: request.tracks.length }
       : {}),
   };
   const galleryRequest = !period ? artistGalleryRequest(request) : undefined;
@@ -1173,6 +1367,7 @@ async function generateCapsule(request: CapsuleRequest, job: CapsuleJob, preserv
     .readFile(draftFile, "utf8")
     .then((data) => JSON.parse(data) as TimeCapsule)
     .catch(() => undefined);
+  const saved = await readCapsule(job.id);
   const reusable =
     draft &&
     draft.researchVersion === researchVersion &&
@@ -1248,8 +1443,40 @@ async function generateCapsule(request: CapsuleRequest, job: CapsuleJob, preserv
     }
   }
   capsule.generation = job.generation;
+  capsule.title = request.title || capsule.title;
+  capsule.revision = (saved?.revision ?? 0) + 1;
+  if (job.mutationId) capsule.lastMutationId = job.mutationId;
   capsule.createdAt = new Date().toISOString();
-  await atomicJSON(path.join(root(), `${job.id}.json`), capsule);
+  await withItemLock(job.id, async () => {
+    const latest = await readCapsule(job.id);
+    if (latest && (latest.revision ?? 0) > (job.baseRevision ?? saved?.revision ?? 0)) {
+      const generatedTracks = capsule.request.tracks;
+      const chosenOptions = capsule.request.options;
+      const presentation = latest.request.options;
+      capsule.request = {
+        ...latest.request,
+        options:
+          chosenOptions && presentation
+            ? {
+                ...chosenOptions,
+                captions: presentation.captions,
+                motion: presentation.motion,
+                showTrackTitle: presentation.showTrackTitle,
+                pace: presentation.pace,
+                order: presentation.order,
+              }
+            : chosenOptions,
+      };
+      capsule.title = latest.title;
+      capsule.lastMutationId = latest.lastMutationId;
+      capsule.scenes = remapTrackScenes(capsule.scenes, generatedTracks, latest.request.tracks);
+      capsule.revision = (latest.revision ?? 0) + 1;
+      if (coverSelection(generatedTracks) !== coverSelection(latest.request.tracks)) {
+        await attachRoonAlbumCovers(capsule, saveRoonAlbumCover);
+      }
+    }
+    await atomicJSON(path.join(root(), `${job.id}.json`), capsule);
+  });
   await fs.unlink(draftFile).catch(() => undefined);
   await fs.rm(path.join(root(), `progress-${job.id}`), { recursive: true, force: true }).catch(() => undefined);
   job.capsule = capsule;

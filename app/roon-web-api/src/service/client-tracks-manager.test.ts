@@ -17,6 +17,8 @@ interface TrackToPlay {
   zoneId: string;
 }
 
+jest.mock("./cinema-music", () => ({ findExactCinemaTrack: jest.fn(), playLocatedCinemaTrack: jest.fn() }));
+
 // Mock the infrastructure dependencies
 jest.mock("@infrastructure", () => ({
   logger: {

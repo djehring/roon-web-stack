@@ -102,7 +102,10 @@ describe("Cinema library lifecycle", () => {
     rejectResearch(new Error("Research unavailable"));
     for (let n = 0; n < 100 && job?.status !== "failed"; n++) await new Promise((resolve) => setTimeout(resolve, 5));
     expect(job?.status).toBe("failed");
-    const failure = JSON.parse(await fs.readFile(path.join(directory, `job-${original.id}.json`), "utf8")) as { status: string; error: string };
+    const failure = JSON.parse(await fs.readFile(path.join(directory, `job-${original.id}.json`), "utf8")) as {
+      status: string;
+      error: string;
+    };
     expect(failure).toMatchObject({ status: "failed", error: "Research unavailable" });
     expect(await readCapsule(original.id)).toEqual(original);
     await deleteCapsule(original.id);
@@ -120,15 +123,9 @@ describe("Cinema library lifecycle", () => {
   });
   test("after restart an old manifest cannot complete an interrupted rebuild, including legacy polling", async () => {
     await deleteCapsule(original.id);
-    await fs.writeFile(
-      path.join(directory, `${original.id}.json`),
-      JSON.stringify(original)
-    );
+    await fs.writeFile(path.join(directory, `${original.id}.json`), JSON.stringify(original));
     const generation = "interrupted-build";
-    await fs.writeFile(
-      path.join(directory, `job-${original.id}.json`),
-      JSON.stringify({ generation })
-    );
+    await fs.writeFile(path.join(directory, `job-${original.id}.json`), JSON.stringify({ generation }));
     expect(await capsuleJob(original.id, generation)).toMatchObject({
       status: "failed",
       generation,
@@ -139,9 +136,7 @@ describe("Cinema library lifecycle", () => {
     });
     expect(await readCapsule(original.id)).toEqual(original);
     await deleteCapsule(original.id);
-    expect(await fs.readdir(directory)).not.toContain(
-      `job-${original.id}.json`
-    );
+    expect(await fs.readdir(directory)).not.toContain(`job-${original.id}.json`);
   });
   test("a new interrupted build fails promptly and a published generation survives restart", async () => {
     const id = "c".repeat(64);
@@ -150,10 +145,7 @@ describe("Cinema library lifecycle", () => {
       generation: "pending",
     });
     const completed = { ...original, id, generation: "complete" };
-    await fs.writeFile(
-      path.join(directory, `${id}.json`),
-      JSON.stringify(completed)
-    );
+    await fs.writeFile(path.join(directory, `${id}.json`), JSON.stringify(completed));
     expect(await capsuleJob(id, "complete")).toMatchObject({
       status: "ready",
       capsule: completed,
@@ -173,8 +165,14 @@ describe("Cinema library lifecycle", () => {
 
   test("a research timeout and its stage remain available after a bridge restart", async () => {
     const id = "e".repeat(64);
-    const recorded = { id, generation: "bowie", status: "failed", message: "Verifying the research…",
-      error: "Verifying the research timed out after a retry. Retry picture update to continue from the saved research." };
+    const recorded = {
+      id,
+      generation: "bowie",
+      status: "failed",
+      message: "Verifying the research…",
+      error:
+        "Verifying the research timed out after a retry. Retry picture update to continue from the saved research.",
+    };
     await fs.writeFile(path.join(directory, `job-${id}.json`), JSON.stringify(recorded));
     expect(await capsuleJob(id, "bowie")).toEqual(recorded);
     expect(await capsuleJob(id)).toEqual(recorded);

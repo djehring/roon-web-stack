@@ -10,6 +10,7 @@ import {
 } from "@model";
 import { findTrackWithGPT } from "../ai-service/chatgpt";
 import { Track } from "../ai-service/types/track";
+import { findExactCinemaTrack, playLocatedCinemaTrack } from "./cinema-music";
 import { matchAlbumInList, matchesArtist, matchTrackInList } from "./matching-utils";
 import { browseIntoLibrary, getLibrarySearchItem, resetBrowseSession, searchForAlbumWithTitle } from "./roon-utils";
 
@@ -75,6 +76,14 @@ export async function findTracksInRoon(tracks: Track[], browseOptions: RoonApiBr
         continue;
       }
 
+      if (track.roonPath || track.matchPolicy === "exact") {
+        const zoneId = browseOptions.zone_or_output_id;
+        if (!zoneId) throw new Error("Choose a Roon room.");
+        const path = track.roonPath || (await findExactCinemaTrack(track, zoneId));
+        await playLocatedCinemaTrack(path, zoneId, startPlay);
+        startPlay = false;
+        continue;
+      }
       logger.debug({ track, startPlay }, "Processing track");
       await resetBrowseSession(browseOptions.multi_session_key, "search");
 

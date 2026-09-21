@@ -48,10 +48,6 @@ test("failure stops queued work and drains active work before allowing a retry",
 });
 
 test("empty work finishes and an invalid limit cannot silently skip work", async () => {
-  await expect(mapCinemaWork([], 2, () => Promise.resolve())).resolves.toEqual(
-    []
-  );
-  await expect(mapCinemaWork([1], 0, () => Promise.resolve())).rejects.toThrow(
-    RangeError
-  );
+  await expect(mapCinemaWork([], 2, () => Promise.resolve())).resolves.toEqual([]);
+  await expect(mapCinemaWork([1], 0, () => Promise.resolve())).rejects.toThrow(RangeError);
 });
