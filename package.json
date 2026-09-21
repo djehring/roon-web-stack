@@ -23,6 +23,7 @@
     "lint:fix": "yarn workspaces foreach -At run lint:fix",
     "test": "yarn workspaces foreach -At run test",
     "typecheck": "yarn workspace @djehring/roon-web-api exec tsc --noEmit && yarn workspace @djehring/roon-web-client exec tsc --noEmit && yarn workspace @djehring/roon-web-ng-client exec tsc --project tsconfig.app.json --noEmit",
+    "dev": "bash scripts/dev.sh",
     "backend": "yarn workspace @djehring/roon-web-api start",
     "backend:prod": "yarn workspace @djehring/roon-web-api start:prod",
     "frontend": "yarn workspace @djehring/roon-web-ng-client start",

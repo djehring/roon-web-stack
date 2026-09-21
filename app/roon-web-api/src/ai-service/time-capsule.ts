@@ -519,7 +519,7 @@ interface ResponseOutput {
   output?: {
     type: string;
     content?: { type: string; text?: string; annotations?: { type: string; url?: string }[] }[];
-    action?: { sources?: { url?: string }[] };
+    action?: { type?: string; sources?: { url?: string }[] };
   }[];
 }
 type VisionPart = { type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail: "high" };
@@ -537,17 +537,14 @@ async function response(
       store: false,
       instructions,
       input: typeof input === "string" && !search ? `Return JSON for this data:\n${input}` : input,
-      max_output_tokens: 10000,
-      // Mapping verified notes/metadata into JSON needs less reasoning than
-      // source research or inspection of the actual image pixels.
-      ...(!search && typeof input === "string" && /^gpt-[56](?:[.-]|$)/.test(model)
-        ? { reasoning: { effort: "low" } }
-        : {}),
+      max_output_tokens: typeof input !== "string" ? 2048 : search ? 4096 : 6144,
+      // Keep each stage bounded, including hidden reasoning and pixel review.
+      ...(/^gpt-[56](?:[.-]|$)/.test(model) ? { reasoning: { effort: "low" } } : {}),
       ...(search
         ? {
-            tools: [{ type: "web_search" }],
+            tools: [{ type: "web_search", search_context_size: "low" }],
             tool_choice: "required",
-            max_tool_calls: 8,
+            max_tool_calls: 4,
             include: ["web_search_call.action.sources"],
           }
         : { text: { format: { type: "json_object" } } }),
@@ -1364,14 +1361,18 @@ async function generateCapsule(request: CapsuleRequest, job: CapsuleJob, preserv
     .readFile(draftFile, "utf8")
     .then((data) => JSON.parse(data) as TimeCapsule)
     .catch(() => undefined);
+  // Older successful builds removed their draft. Their saved, sourced scenes
+  // are still reusable when refreshing pictures for the same request.
   const saved = await readCapsule(job.id);
-  const reusable =
-    draft &&
-    draft.researchVersion === researchVersion &&
-    capsuleKey(draft.request) === capsuleKey(request) &&
-    !capsuleCoverageError(draft) &&
-    (!preservedPeriod?.periodStart ||
-      (draft.periodStart === preservedPeriod.periodStart && draft.periodEnd === preservedPeriod.periodEnd));
+  const reusable = [draft, saved].find(
+    (candidate) =>
+      candidate &&
+      candidate.researchVersion === researchVersion &&
+      capsuleKey(candidate.request) === capsuleKey(request) &&
+      !capsuleCoverageError(candidate) &&
+      (!preservedPeriod?.periodStart ||
+        (candidate.periodStart === preservedPeriod.periodStart && candidate.periodEnd === preservedPeriod.periodEnd))
+  );
   // An artist gallery replaces every scene with archive captions, so a research
   // pass would only be discarded. Go straight to the pictures.
   const subject =
@@ -1389,7 +1390,7 @@ async function generateCapsule(request: CapsuleRequest, job: CapsuleJob, preserv
         scenes: [],
       }
     : reusable
-      ? draft
+      ? reusable
       : await researchCapsule(request, job, preservedPeriod);
   // An image failure must not discard the verified bulletin and start all its research again.
   if (!subject) await atomicJSON(draftFile, capsule);
@@ -1474,8 +1475,8 @@ async function generateCapsule(request: CapsuleRequest, job: CapsuleJob, preserv
     }
     await atomicJSON(path.join(root(), `${job.id}.json`), capsule);
   });
-  await fs.unlink(draftFile).catch(() => undefined);
-  await fs.rm(path.join(root(), `progress-${job.id}`), { recursive: true, force: true }).catch(() => undefined);
+  // Keep research, response checkpoints and usage reservations for future
+  // rebuilds. Deleting the Cinema item removes all of these together.
   job.capsule = capsule;
   job.message = "Pictures ready";
   job.status = "ready";
@@ -1659,9 +1660,29 @@ const subjectWords = (value: string) =>
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 
+/** Sports teams, military ensembles and product shots that only mention the name. */
+const unrelatedArchiveSubject =
+  /\b(?:football|baseball|basketball|soccer|hockey|vanderbilt|navy|vinyl|a-side|b-side|home computer|7["”″]?\s*single|petty officer|seaman|musician 1st class|musician first class|navy band|\d{6}-n-[a-z0-9]+|holden|opel|vauxhall|berlina|sedan|coupe|hatchback|automobile|saloon)\b/i;
+const musicPortraitCue =
+  /\b(?:performing|concert|singer|vocalist|guitarist|guitar|motown|musician|on stage|publicity photo|in concert)\b/i;
+
+function archiveFilename(source: string) {
+  const file = source.match(/File:([^/#?]+)/i)?.[1] ?? source.split("/").pop() ?? "";
+  return file.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function oneWordSubjectMatches(word: string, description: string, source: string, candidateText: string) {
+  const captionWords = subjectWords(`${archiveFilename(source)} ${description}`);
+  const captionPhrase = ` ${subjectWords(description).join(" ")} `;
+  if (word.length < 4 || genericSubjectWords.has(word) || !captionWords.includes(word)) return false;
+  if (unrelatedArchiveSubject.test(candidateText)) return false;
+  if (captionPhrase.includes(` the ${word} `) || musicPortraitCue.test(candidateText)) return true;
+  return captionWords.every((item) => item === word || /^\d{4}$/.test(item) || item.length <= 2);
+}
+
 export function photographMatchesScene(
   scene: Pick<CapsuleScene, "title" | "imageSubjects">,
-  image: Pick<CapsuleImage, "sourceUrl" | "description">
+  image: Pick<CapsuleImage, "sourceUrl" | "description"> & { credit?: string }
 ) {
   const titleWords = subjectWords(scene.title);
   let source = image.sourceUrl;
@@ -1670,22 +1691,25 @@ export function photographMatchesScene(
   } catch {
     // A valid URL can still contain a literal percent sign in archive metadata.
   }
-  const candidateWords = subjectWords(`${source} ${image.description}`);
+  const candidateText = `${source} ${image.description} ${image.credit ?? ""}`;
+  const candidateWords = subjectWords(candidateText);
   const candidatePhrase = ` ${candidateWords.join(" ")} `;
+  const candidateSet = new Set(candidateWords);
   if (
     scene.imageSubjects?.some((subject) => {
       const words = subjectWords(subject);
-      return (
-        words.length >= 2 &&
-        (candidatePhrase.includes(` ${words.join(" ")} `) ||
-          (words.length === 2 && candidatePhrase.includes(` ${words[1]} ${words[0]} `)))
-      );
+      if (words.length >= 2) {
+        return (
+          candidatePhrase.includes(` ${words.join(" ")} `) ||
+          (words.length === 2 && candidatePhrase.includes(` ${words[1]} ${words[0]} `))
+        );
+      }
+      return words.length === 1 && oneWordSubjectMatches(words[0], image.description, source, candidateText);
     })
   )
     return true;
   // Named subjects must match as a phrase, not disconnected words such as "Blue" and "Peter".
   if (scene.imageSubjects?.length) return false;
-  const candidateSet = new Set(candidateWords);
   const specific = [
     ...new Set(
       titleWords.filter(

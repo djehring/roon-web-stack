@@ -149,11 +149,17 @@ Then install, build (just to check everything works fine), have fun:
 yarn install
 yarn build
 ```
-To launch the `backend` in watch mode:
+To launch the full local bridge so API and UI rebuild when source changes:
+```bash
+yarn dev
+```
+That serves the Angular app from the API at `http://localhost:3000` and `https://localhost:3443`. Refresh the browser after a UI rebuild. `yarn build` / `yarn clean` in the API wipes `app/roon-web-api/bin`, including the `web` symlink `yarn dev` creates; run `yarn dev` again afterwards.
+
+To launch only the `backend` in watch mode:
 ```bash
 yarn backend
 ```
-To launch the `frontend` in watch mode:
+To launch the Angular dev server (live reload on port 4200, proxies `/api` to the backend):
 ```bash
 yarn frontend
 ```

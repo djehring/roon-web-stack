@@ -107,6 +107,102 @@ describe("Time Capsule", () => {
         }
       )
     ).toBe(true);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:The_Commodores_1977.jpg",
+          description: "The Commodores performing in 1977",
+        }
+      )
+    ).toBe(true);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodore_64.jpg",
+          description: "A Commodore 64 home computer",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Lionel_Richie.jpg",
+          description: "Lionel Richie in 1984",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:1904Vandy.jpg",
+          description: "1904 Vanderbilt Commodores football team, the first one coached by Dan McGugin.",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodores_at_U.S._Capitol_(9301976684).jpg",
+          description: "U.S. Navy photo by Musician 1st Class Jeremy Buckler/Released",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Motown_7%22_Single_(Side_1).jpg",
+          description: 'Side 1 (A-side) of a Motown 7" Single, containing "Nightshift" by the Commodores.',
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Madonna", imageSubjects: ["Madonna"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Madonna_1984.jpg",
+          description: "Madonna in 1984",
+        }
+      )
+    ).toBe(true);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Holden_Commodore_Berlina_(3).jpg",
+          description:
+            "Another VK Commodore. Berlina is a mid level specification. Like many Commodores this one has received a few visual modifications at some point in it's life.",
+          credit: "FotoSleuth",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodores_Tour_(22657483656).jpg",
+          description:
+            "151029-N-HA868-047 EVANSTON, Ill. (October 29, 2015) Musician 1st Class Kevin McDonald demonstrates rhythm. The Commodores are currently on an 18-day concert tour.",
+          credit: "United States Navy Band from Washington, D.C., USA",
+        }
+      )
+    ).toBe(false);
+    expect(
+      photographMatchesScene(
+        { title: "Commodores", imageSubjects: ["Commodores"] },
+        {
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodores_tour_(22569276978).jpg",
+          description:
+            "Musician 1st Class Kristine Hisa performs during a concert by the Commodores jazz ensemble at Secrest Auditorium.",
+          credit: "United States Navy Band from Washington, D.C., USA",
+        }
+      )
+    ).toBe(false);
     expect(photographWithinEra("3 October 1926", "1978-10-07")).toBe(false);
     expect(photographWithinEra("1975-10-07", "1978-10-07")).toBe(true);
     expect(

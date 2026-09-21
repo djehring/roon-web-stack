@@ -183,6 +183,15 @@ test("a mixed artist montage researches only places once, and saves web photos p
     );
     const covers = job.capsule?.scenes.filter((scene) => scene.topic === "albumCovers");
     expect(covers?.[0].image?.license).toBe("Artwork supplied by Roon");
+    expect(JSON.parse(await fs.readFile(path.join(directory, `draft-${job.id}.json`), "utf8"))).toHaveProperty(
+      "researchVersion",
+      6
+    );
+    const checkpoints = path.join(directory, `progress-${job.id}`);
+    const requestDirectories = await fs.readdir(checkpoints);
+    const files = await fs.readdir(path.join(checkpoints, requestDirectories[0]));
+    expect(files).toContain("usage.json");
+    expect(files.length).toBeGreaterThan(1);
   } finally {
     jest.restoreAllMocks();
     if (previous === undefined) delete process.env.TIME_CAPSULE_CACHE_DIR;

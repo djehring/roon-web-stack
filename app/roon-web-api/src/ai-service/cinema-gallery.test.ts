@@ -4,7 +4,7 @@ import path from "node:path";
 import { cinemaAlbumCover } from "../service/cinema-artwork";
 import { openaiKeyStore } from "../service/openai-key-store";
 import { attachRoonAlbumCovers, illustrateArtistGallery, isArtistGallery } from "./cinema-gallery";
-import { readCapsule, startCapsule, TimeCapsule, validateCapsuleRequest } from "./time-capsule";
+import { photographMatchesScene, readCapsule, startCapsule, TimeCapsule, validateCapsuleRequest } from "./time-capsule";
 
 jest.mock("../service/cinema-artwork", () => ({ cinemaAlbumCover: jest.fn() }));
 
@@ -62,6 +62,87 @@ test("rebuilding prefers different archive pictures when alternatives exist", as
   expect(capsule.scenes.every((scene) => !previousSources.has(scene.sources[0].url))).toBe(true);
 });
 
+test("Commodores galleries keep band photographs and drop namesakes", async () => {
+  const input = request();
+  if (!input.options) throw new Error("Missing test options");
+  input.options.subject = "Commodores";
+  input.tracks = [{ artist: "Commodores", track: "Easy", album: "Commodores" }];
+  const candidates = [
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:The_Commodores_1970s_(Motown_publicity_photo).jpg",
+      downloadUrl: "https://upload.wikimedia.org/commodores-publicity.jpg",
+      date: "1975",
+      description: "1970s publicity photo of The Commodores.",
+      credit: "Motown Records",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:1904Vandy.jpg",
+      downloadUrl: "https://upload.wikimedia.org/vandy-football.jpg",
+      date: "1904",
+      description: "1904 Vanderbilt Commodores football team, the first one coached by Dan McGugin.",
+      credit: "Unknown",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodores_at_U.S._Capitol_(9301976684).jpg",
+      downloadUrl: "https://upload.wikimedia.org/navy-commodores.jpg",
+      date: "2013",
+      description: "U.S. Navy photo by Musician 1st Class Jeremy Buckler/Released",
+      credit: "United States Navy Band",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Commodores_Tour_(22657483656).jpg",
+      downloadUrl: "https://upload.wikimedia.org/navy-tour.jpg",
+      date: "2015",
+      description:
+        "151029-N-HA868-047 EVANSTON, Ill. Musician 1st Class Kevin McDonald. The Commodores are currently on an 18-day concert tour.",
+      credit: "United States Navy Band from Washington, D.C., USA",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Holden_Commodore_Berlina_(3).jpg",
+      downloadUrl: "https://upload.wikimedia.org/holden-commodore.jpg",
+      date: "2011",
+      description:
+        "Another VK Commodore. Berlina is a mid level specification. Like many Commodores this one has received a few visual modifications.",
+      credit: "FotoSleuth",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Motown_7%22_Single_(Side_1).jpg",
+      downloadUrl: "https://upload.wikimedia.org/motown-single.jpg",
+      date: "2023",
+      description: 'Side 1 (A-side) of a Motown 7" Single, containing "Nightshift" by the Commodores.',
+      credit: "DiscoA340",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+  ];
+  const capsule: TimeCapsule = {
+    id: "commodores",
+    request: input,
+    title: "Commodores",
+    contextLabel: "Commodores",
+    createdAt: "2026-09-20T15:00:00Z",
+    scenes: [],
+  };
+  await illustrateArtistGallery(capsule, {
+    search: () => Promise.resolve(candidates),
+    eligible: (candidate) => candidate,
+    matches: photographMatchesScene,
+    save: (candidate) => Promise.resolve({ ...candidate, file: candidate.downloadUrl }),
+    review: () => Promise.resolve(),
+  });
+  expect(capsule.scenes.map((scene) => scene.sources[0].url)).toEqual([candidates[0].sourceUrl]);
+});
+
 test("direct galleries cover artist pictures, career photos and covers; dated or wider stories retain research", () => {
   const input = request();
   expect(isArtistGallery(input)).toBe(true);
@@ -79,6 +160,13 @@ test("direct galleries cover artist pictures, career photos and covers; dated or
   ).toBe(false);
   const options = input.options;
   if (!options) throw new Error("Missing test options");
+  expect(
+    isArtistGallery({
+      ...input,
+      options: { ...options, subject: "Commodores" },
+      tracks: [{ artist: "Commodores", track: "Three Times a Lady", album: "Natural High" }],
+    })
+  ).toBe(true);
   expect(
     isArtistGallery({
       ...input,
@@ -203,7 +291,7 @@ test("a complete Bowie gallery searches archives directly and only uses AI to ch
         input: { content: { type: string; text?: string }[] }[];
       };
       expect(body.tools).toBeUndefined();
-      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning).toEqual({ effort: "low" });
       expect(Array.isArray(body.input)).toBe(true);
       const ids = body.input[0].content
         .filter((part) => part.type === "input_text")
@@ -258,6 +346,53 @@ test("a complete Bowie gallery searches archives directly and only uses AI to ch
     else process.env.TIME_CAPSULE_CACHE_DIR = previous;
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test("one-word artists use Wikipedia entity photos instead of a Commons namesake dump", async () => {
+  const input = request();
+  if (!input.options) throw new Error("Missing test options");
+  input.options.subject = "Commodores";
+  input.options.topics = ["artistImages"];
+  input.tracks = [{ artist: "Commodores", track: "Easy", album: "Commodores" }];
+  const entity = {
+    sourceUrl: "https://commons.wikimedia.org/wiki/File:The_Commodores_1970s_(Motown_publicity_photo).jpg",
+    downloadUrl: "https://upload.wikimedia.org/commodores-publicity.jpg",
+    date: "1975",
+    description: "1970s publicity photo of The Commodores.",
+    credit: "Motown Records",
+    license: "CC BY 4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+  };
+  const football = {
+    sourceUrl: "https://commons.wikimedia.org/wiki/File:1904Vandy.jpg",
+    downloadUrl: "https://upload.wikimedia.org/vandy-football.jpg",
+    date: "1904",
+    description: "1904 Vanderbilt Commodores football team, the first one coached by Dan McGugin.",
+    credit: "Unknown",
+    license: "CC BY 4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+  };
+  const search = jest.fn().mockResolvedValue([football]);
+  const fallback = jest.fn().mockResolvedValue([entity]);
+  const capsule: TimeCapsule = {
+    id: "entity",
+    request: input,
+    title: "Commodores",
+    contextLabel: "Commodores",
+    createdAt: "2026-09-20T15:00:00Z",
+    scenes: [],
+  };
+  await illustrateArtistGallery(capsule, {
+    search,
+    fallbackSearch: fallback,
+    eligible: (candidate) => candidate,
+    matches: photographMatchesScene,
+    save: (candidate) => Promise.resolve({ ...candidate, file: candidate.downloadUrl }),
+    review: () => Promise.resolve(),
+  });
+  expect(fallback).toHaveBeenCalledWith("Commodores");
+  expect(search).not.toHaveBeenCalled();
+  expect(capsule.scenes.map((scene) => scene.sources[0].url)).toEqual([entity.sourceUrl]);
 });
 
 test("uses other web image providers when Commons has no matching artist photos", async () => {

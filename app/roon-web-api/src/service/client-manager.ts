@@ -179,7 +179,9 @@ class InternalClientManager implements ClientManager {
   };
 
   private ensureStarted = (): void => {
-    if (!this.isStarted || !zoneManager.isStarted()) {
+    // Do not wait for zoneManager. HTTP is already up while pairing, and House
+    // Remote / EventSource retry every second during that window.
+    if (!this.isStarted) {
       throw new Error("clientManager is not started");
     }
   };

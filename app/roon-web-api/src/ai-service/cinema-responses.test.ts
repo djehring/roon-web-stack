@@ -3,11 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { cinemaProgress, cinemaResponse, withCinemaResponses } from "./cinema-responses";
 
-jest.mock("node:timers/promises", () => ({
-  setTimeout: jest.fn().mockResolvedValue(undefined),
-}));
-
-const completed = () => new Response(JSON.stringify({ status: "completed", output: [] }));
+const completed = () =>
+  new Response(
+    JSON.stringify({
+      status: "completed",
+      output: [{ type: "message", content: [{ type: "output_text", text: "{}" }] }],
+    })
+  );
 const timeout = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
 const body = (topic: string) => ({
   input: `Bowie greatest hits: ${topic}`,
@@ -42,30 +44,27 @@ describe("Cinema research timeouts", () => {
     expect(writes).toEqual(["start:first", "end:first", "start:second", "end:second"]);
   });
 
-  test("web research has a longer initial budget, retries once and reports its stage", async () => {
+  test("web research has a bounded initial allowance and never retries automatically", async () => {
     const fetchMock = jest
       .spyOn(globalThis, "fetch")
       .mockRejectedValueOnce(timeout())
       .mockResolvedValueOnce(completed());
     const budgets = jest.spyOn(AbortSignal, "timeout");
     const progress = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
-    const result = await withCinemaResponses({ directory, progress }, () =>
-      cinemaResponse(body("portraits"), "test-key", "Researching artist pictures")
-    );
-    expect(result.status).toBe("completed");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(budgets.mock.calls.map(([budget]) => budget)).toEqual([300_000, 300_000]);
-    expect(progress.mock.calls.map(([message]) => message)).toEqual([
-      "Researching artist pictures…",
-      "Researching artist pictures — retrying a slow connection…",
-    ]);
+    await expect(
+      withCinemaResponses({ directory, progress }, () =>
+        cinemaResponse(body("portraits"), "test-key", "Researching artist pictures")
+      )
+    ).rejects.toThrow("No automatic retry was made");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(budgets.mock.calls.map(([budget]) => budget)).toEqual([180_000]);
+    expect(progress.mock.calls.map(([message]) => message)).toEqual(["Researching artist pictures…"]);
   });
 
   test("retrying Bowie resumes saved research instead of paying for every earlier topic again", async () => {
     const fetchMock = jest
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(completed())
-      .mockRejectedValueOnce(timeout())
       .mockRejectedValueOnce(timeout());
     const context = { directory, progress: () => Promise.resolve() };
     const research = () =>
@@ -73,15 +72,15 @@ describe("Cinema research timeouts", () => {
         await cinemaResponse(body("career"), "test-key", "Researching career");
         return cinemaResponse(body("portraits"), "test-key", "Researching artist pictures");
       });
-    await expect(research()).rejects.toThrow("Researching artist pictures timed out after a retry");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(await fs.readdir(directory)).toHaveLength(1);
+    await expect(research()).rejects.toThrow("Researching artist pictures timed out");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await fs.readdir(directory)).toHaveLength(2);
     fetchMock.mockResolvedValueOnce(completed());
     await expect(research()).resolves.toMatchObject({ status: "completed" });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(
       (
-        JSON.parse(fetchMock.mock.calls[3][1]?.body as string) as {
+        JSON.parse(fetchMock.mock.calls[2][1]?.body as string) as {
           input: string;
         }
       ).input
@@ -89,15 +88,12 @@ describe("Cinema research timeouts", () => {
     expect(await fs.readFile(path.join(directory, (await fs.readdir(directory))[0]), "utf8")).not.toContain("test-key");
   });
 
-  test("transient HTTP errors retry, but credentials and incomplete responses fail immediately", async () => {
+  test("HTTP errors and incomplete responses all fail without paid retries", async () => {
     const fetchMock = jest
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response("Unavailable", { status: 503 }))
-      .mockResolvedValueOnce(completed());
-    await expect(cinemaResponse(body("career"), "test-key", "Researching career")).resolves.toMatchObject({
-      status: "completed",
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      .mockResolvedValueOnce(new Response("Unavailable", { status: 503 }));
+    await expect(cinemaResponse(body("career"), "test-key", "Researching career")).rejects.toThrow("HTTP 503");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { message: "Invalid key" } }), {
         status: 401,
@@ -106,12 +102,12 @@ describe("Cinema research timeouts", () => {
     await expect(cinemaResponse(body("career"), "test-key", "Researching career")).rejects.toThrow("HTTP 401");
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: "incomplete" })));
     await expect(cinemaResponse(body("career"), "test-key", "Researching career")).rejects.toThrow(
-      "Research did not complete"
+      "Researching career did not complete"
     );
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  test("structured output stays uncached until its caller validates the draft", async () => {
+  test("valid structured output is cached so repeated compilation does not cost again", async () => {
     const fetchMock = jest.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(completed()));
     const compile = () =>
       withCinemaResponses({ directory, progress: () => Promise.resolve() }, () =>
@@ -119,7 +115,7 @@ describe("Cinema research timeouts", () => {
       );
     await compile();
     await compile();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(await fs.readdir(directory)).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await fs.readdir(directory)).toHaveLength(2);
   });
 });

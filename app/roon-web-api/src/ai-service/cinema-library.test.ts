@@ -111,6 +111,36 @@ describe("Cinema library lifecycle", () => {
     await deleteCapsule(original.id);
     expect(await capsuleJob(original.id)).toBeUndefined();
   });
+  test("a rebuild reuses a successful montage's sourced scenes when its old draft was removed", async () => {
+    jest.spyOn(openaiKeyStore, "read").mockReturnValue("test-key");
+    original.researchVersion = 6;
+    original.scenes = [
+      {
+        id: "scene-1",
+        title: "A verified event",
+        body: "Evidence already gathered",
+        dateLabel: "1976-09-02",
+        scope: "News",
+        sources: [{ title: "Archive", url: "https://example.org/verified" }],
+        trackIndices: [],
+        topic: "headlines",
+      },
+    ];
+    await fs.writeFile(path.join(directory, `${original.id}.json`), JSON.stringify(original));
+    const fetchMock = jest.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Stop at picture planning"));
+    const job = await startCapsule(original.request, original.id, {
+      periodStart: original.periodStart,
+      periodEnd: original.periodEnd,
+    });
+    for (let n = 0; n < 100 && job.status !== "failed"; n++) await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(job.error).toBe("Stop at picture planning");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as { instructions: string; tools?: unknown };
+    expect(body.instructions).toMatch(/^Return JSON \{searches:/);
+    expect(body.tools).toBeUndefined();
+    expect(await readCapsule(original.id)).toEqual(original);
+  });
+
   test("new explicit dates are resolved instead of silently preserving the old range", async () => {
     jest.spyOn(openaiKeyStore, "read").mockReturnValue("test-key");
     const fetchMock = jest.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Stop research"));

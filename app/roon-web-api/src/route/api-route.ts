@@ -243,7 +243,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     }
   );
   server.get<{ Params: ClientIdParam }>("/:client_id/events", (req, reply) => {
-    const { client, badRequestReply } = getClient(req, reply);
+    const { client, badRequestReply } = getClient(req, reply, { revive: true });
     if (client) {
       reply = reply.header("x-accel-buffering", "no");
       const events = client.events();
@@ -530,7 +530,8 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
 
 const getClient = (
   req: FastifyRequest<{ Params: ClientIdParam }>,
-  res: FastifyReply
+  res: FastifyReply,
+  options: { revive?: boolean } = {}
 ): {
   client?: Client;
   badRequestReply?: FastifyReply;
@@ -538,9 +539,19 @@ const getClient = (
   try {
     const client_id = req.params.client_id;
     logger.debug({ client_id }, "Received request");
-    return {
-      client: clientManager.get(client_id),
-    };
+    try {
+      return {
+        client: clientManager.get(client_id),
+      };
+    } catch (err) {
+      if (!options.revive || !(err instanceof Error) || !err.message.includes("is not a registered client_id")) {
+        throw err;
+      }
+      clientManager.register(client_id);
+      return {
+        client: clientManager.get(client_id),
+      };
+    }
   } catch (err) {
     if (err instanceof Error) {
       logger.warn(err.message);

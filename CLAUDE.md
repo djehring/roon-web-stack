@@ -22,9 +22,12 @@ yarn lint:fix
 # Run tests across all workspaces
 yarn test
 
+# Local bridge with API + UI rebuilds on change (ports 3000/3443)
+yarn dev
+
 # Development servers (run in separate terminals)
-yarn backend   # API server with watch mode (port 3000/3443)
-yarn frontend  # Angular dev server (port 4200)
+yarn backend   # API webpack/nodemon watch only (port 3000/3443)
+yarn frontend  # Angular dev server with live reload (port 4200)
 
 # Run tests for a specific workspace
 yarn workspace @djehring/roon-web-api test

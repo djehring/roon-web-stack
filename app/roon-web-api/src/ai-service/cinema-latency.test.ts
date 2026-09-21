@@ -60,7 +60,7 @@ afterEach(async () => {
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-test.each(["gpt-5.6-sol", "gpt-4o"])("uses fast JSON conversion only when supported by %s", async (model) => {
+test.each(["gpt-5.6-sol", "gpt-4o"])("bounds reasoning at every stage only when supported by %s", async (model) => {
   process.env.TIME_CAPSULE_MODEL = model;
   const calls: {
     input: string;
@@ -102,9 +102,7 @@ test.each(["gpt-5.6-sol", "gpt-4o"])("uses fast JSON conversion only when suppor
     await new Promise((resolve) => setTimeout(resolve, 10));
   expect(job.error).toBe("Stopped before image selection");
   expect(calls).toHaveLength(4);
-  expect(calls.slice(0, 2).every((call) => call.reasoning === undefined)).toBe(true);
-  for (const call of calls.slice(2))
-    expect(call.reasoning).toEqual(model === "gpt-5.6-sol" ? { effort: "low" } : undefined);
+  for (const call of calls) expect(call.reasoning).toEqual(model === "gpt-5.6-sol" ? { effort: "low" } : undefined);
 });
 
 test("Bowie topics overlap, then verification receives all completed sources", async () => {
@@ -175,7 +173,8 @@ test("photo review overlaps two batches and cannot approve photos from another b
     const body = JSON.parse(init?.body as string) as {
       input: { content: { type: string; text?: string }[] }[];
     };
-    expect(body).not.toHaveProperty("reasoning");
+    expect(body).toHaveProperty("reasoning.effort", "low");
+    expect(body).toHaveProperty("max_output_tokens", 2048);
     const ids = body.input[0].content
       .filter((part) => part.type === "input_text")
       .map((part) => (JSON.parse(part.text ?? "{}") as { photoId?: string }).photoId)

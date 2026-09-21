@@ -9,6 +9,8 @@ interface GalleryCandidate extends Omit<CapsuleImage, "file"> {
 interface GallerySearch {
   query: string;
   topic: string;
+  /** One-word namesakes must use Wikipedia/Openverse, not a Commons filename dump. */
+  entity?: boolean;
 }
 interface GallerySources {
   previousSources?: Set<string>;
@@ -18,6 +20,39 @@ interface GallerySources {
   matches: (scene: CapsuleScene, candidate: GalleryCandidate) => boolean;
   save: (candidate: GalleryCandidate) => Promise<CapsuleImage | undefined>;
   review: (capsule: TimeCapsule) => Promise<void>;
+}
+
+/** One-word names that collide with places, royalty or common English. */
+const ambiguousOneWordArtists = new Set([
+  "alabama",
+  "america",
+  "asia",
+  "berlin",
+  "boston",
+  "chicago",
+  "cream",
+  "eagles",
+  "europe",
+  "georgia",
+  "heart",
+  "journey",
+  "kansas",
+  "kiss",
+  "london",
+  "paris",
+  "phoenix",
+  "police",
+  "prince",
+  "queen",
+  "rush",
+  "texas",
+  "who",
+  "yes",
+]);
+
+function distinctiveArtistName(artist: string[]): boolean {
+  if (artist.length > 1) return true;
+  return artist.length === 1 && !ambiguousOneWordArtists.has(artist[0]);
 }
 
 /** Artist galleries use archive captions; only contextual stories need research. */
@@ -32,7 +67,7 @@ export function isArtistGallery(request: CapsuleRequest): boolean {
   return (
     options?.mode === "artist" &&
     // Short ambiguous names such as Queen still need the research resolver.
-    artist.length > 1 &&
+    distinctiveArtistName(artist) &&
     subject.length > 0 &&
     subject.every((word) => artist.includes(word)) &&
     !options.periodStart &&
@@ -52,11 +87,23 @@ export function artistGalleryRequest(request: CapsuleRequest): CapsuleRequest | 
 }
 
 function gallerySearches(request: CapsuleRequest): GallerySearch[] {
-  const artist = `"${request.tracks[0].artist.replace(/["\\]/g, " ")}"`;
+  const name = request.tracks[0].artist.replace(/["\\]/g, " ").trim();
+  const artist = `"${name}"`;
+  const oneWord = !/\s/.test(name);
   const topics = request.options?.topics ?? [];
   const searches: GallerySearch[] = [];
-  if (topics.includes("artistImages")) searches.push({ topic: "artistImages", query: artist });
-  if (topics.includes("career")) searches.push({ topic: "career", query: `${artist} concert` });
+  if (topics.includes("artistImages")) {
+    searches.push(
+      oneWord ? { topic: "artistImages", query: name, entity: true } : { topic: "artistImages", query: artist }
+    );
+  }
+  if (topics.includes("career")) {
+    searches.push(
+      oneWord
+        ? { topic: "career", query: `${name} concert`, entity: true }
+        : { topic: "career", query: `${artist} concert` }
+    );
+  }
   return searches;
 }
 
@@ -147,8 +194,8 @@ function galleryScene(artist: string, search: GallerySearch, image: GalleryCandi
 }
 
 function matchesGallery(image: GalleryCandidate): boolean {
-  const description = `${image.sourceUrl} ${image.description}`;
-  return !/\b(?:statue|sculpture|mural|waxwork|tribute|impersonator|lookalike|memorial|cropped|painting|drawing|caricature|watercolou?r|engraving|illustration|sketch|poster|logo)\b/i.test(
+  const description = `${image.sourceUrl} ${image.description} ${image.credit}`;
+  return !/\b(?:statue|sculpture|mural|waxwork|tribute|impersonator|lookalike|memorial|cropped|painting|drawing|caricature|watercolou?r|engraving|illustration|sketch|poster|logo|football|baseball|basketball|soccer|hockey|vanderbilt|navy|vinyl|a-side|b-side|home computer|7["”″]?\s*single|petty officer|seaman|musician 1st class|musician first class|navy band|\d{6}-n-[a-z0-9]+|holden|opel|vauxhall|berlina|sedan|coupe|hatchback|automobile|saloon)\b/i.test(
     description
   );
 }
@@ -192,9 +239,10 @@ export async function illustrateArtistGallery(capsule: TimeCapsule, sources: Gal
         const scene = galleryScene(artist, search, candidate);
         return sources.matches(scene, candidate) ? [{ candidate, scene }] : [];
       });
-    const primary = choices(await sources.search(search.query).catch(() => []));
+    const lookup = search.entity && sources.fallbackSearch ? sources.fallbackSearch : sources.search;
+    const primary = choices(await lookup(search.query).catch(() => []));
     const fallback =
-      primary.length < 6 && sources.fallbackSearch
+      primary.length < 6 && sources.fallbackSearch && !search.entity
         ? choices(await sources.fallbackSearch(search.query).catch(() => []))
         : [];
     return variedDates([...primary, ...fallback]).sort(
