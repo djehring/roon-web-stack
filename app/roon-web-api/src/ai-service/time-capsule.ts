@@ -219,9 +219,7 @@ export async function listCapsules(): Promise<TimeCapsule[]> {
   await fs.mkdir(root(), { recursive: true });
   const names = (await fs.readdir(root())).filter((name) => /^[a-f0-9]{64}\.json$/.test(name));
   const capsules = await Promise.all(names.map((name) => readCapsule(name.slice(0, -5))));
-  return capsules
-    .filter((item): item is TimeCapsule => !!item)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return capsules.filter((item): item is TimeCapsule => !!item).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function startCapsule(
