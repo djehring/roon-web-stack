@@ -2,12 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { openaiKeyStore } from "../service/openai-key-store";
-import {
-  reviewPhotographs,
-  startCapsule,
-  TimeCapsule,
-  validateCapsuleRequest,
-} from "./time-capsule";
+import { reviewPhotographs, startCapsule, TimeCapsule, validateCapsuleRequest } from "./time-capsule";
 
 const request = () =>
   validateCapsuleRequest({
@@ -39,9 +34,7 @@ const output = (text: string) =>
             {
               type: "output_text",
               text,
-              annotations: [
-                { type: "url_citation", url: "https://example.org/source" },
-              ],
+              annotations: [{ type: "url_citation", url: "https://example.org/source" }],
             },
           ],
         },
@@ -60,70 +53,59 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   jest.restoreAllMocks();
-  if (previousDirectory === undefined)
-    delete process.env.TIME_CAPSULE_CACHE_DIR;
+  if (previousDirectory === undefined) delete process.env.TIME_CAPSULE_CACHE_DIR;
   else process.env.TIME_CAPSULE_CACHE_DIR = previousDirectory;
   if (previousModel === undefined) delete process.env.TIME_CAPSULE_MODEL;
   else process.env.TIME_CAPSULE_MODEL = previousModel;
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-test.each(["gpt-5.6-sol", "gpt-4o"])(
-  "uses fast JSON conversion only when supported by %s",
-  async (model) => {
-    process.env.TIME_CAPSULE_MODEL = model;
-    const calls: {
-      input: string;
-      instructions: string;
-      tools?: unknown[];
-      reasoning?: { effort: string };
-    }[] = [];
-    jest.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
-      const body = JSON.parse(init?.body as string) as (typeof calls)[number];
-      calls.push(body);
-      if (body.instructions.startsWith("Return JSON {searches:"))
-        return Promise.reject(new Error("Stopped before image selection"));
-      if (body.tools)
-        return Promise.resolve(output("Verified David Bowie notes"));
-      return Promise.resolve(
-        output(
-          JSON.stringify({
-            title: "David Bowie",
-            contextLabel: "Bowie",
-            scenes: [
-              {
-                title: "David Bowie",
-                body: "David Bowie performing",
-                dateLabel: "",
-                scope: "Music",
-                topic: "historicalContext",
-                sources: [
-                  { title: "Archive", url: "https://example.org/source" },
-                ],
-                imageSubjects: ["David Bowie"],
-                trackIndices: [],
-              },
-            ],
-          })
-        )
-      );
-    });
-    const input = request();
-    if (input.options) input.options.topics = ["historicalContext"];
-    const job = await startCapsule(input);
-    for (let attempt = 0; attempt < 200 && job.status !== "failed"; attempt++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(job.error).toBe("Stopped before image selection");
-    expect(calls).toHaveLength(4);
-    expect(
-      calls.slice(0, 2).every((call) => call.reasoning === undefined)
-    ).toBe(true);
-    for (const call of calls.slice(2))
-      expect(call.reasoning).toEqual(
-        model === "gpt-5.6-sol" ? { effort: "low" } : undefined
-      );
-  }
-);
+test.each(["gpt-5.6-sol", "gpt-4o"])("uses fast JSON conversion only when supported by %s", async (model) => {
+  process.env.TIME_CAPSULE_MODEL = model;
+  const calls: {
+    input: string;
+    instructions: string;
+    tools?: unknown[];
+    reasoning?: { effort: string };
+  }[] = [];
+  jest.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+    const body = JSON.parse(init?.body as string) as (typeof calls)[number];
+    calls.push(body);
+    if (body.instructions.startsWith("Return JSON {searches:"))
+      return Promise.reject(new Error("Stopped before image selection"));
+    if (body.tools) return Promise.resolve(output("Verified David Bowie notes"));
+    return Promise.resolve(
+      output(
+        JSON.stringify({
+          title: "David Bowie",
+          contextLabel: "Bowie",
+          scenes: [
+            {
+              title: "David Bowie",
+              body: "David Bowie performing",
+              dateLabel: "",
+              scope: "Music",
+              topic: "historicalContext",
+              sources: [{ title: "Archive", url: "https://example.org/source" }],
+              imageSubjects: ["David Bowie"],
+              trackIndices: [],
+            },
+          ],
+        })
+      )
+    );
+  });
+  const input = request();
+  if (input.options) input.options.topics = ["historicalContext"];
+  const job = await startCapsule(input);
+  for (let attempt = 0; attempt < 200 && job.status !== "failed"; attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(job.error).toBe("Stopped before image selection");
+  expect(calls).toHaveLength(4);
+  expect(calls.slice(0, 2).every((call) => call.reasoning === undefined)).toBe(true);
+  for (const call of calls.slice(2))
+    expect(call.reasoning).toEqual(model === "gpt-5.6-sol" ? { effort: "low" } : undefined);
+});
 
 test("Bowie topics overlap, then verification receives all completed sources", async () => {
   let active = 0;
@@ -146,8 +128,7 @@ test("Bowie topics overlap, then verification receives all completed sources", a
     return output(`Sourced ${input.topic} notes`);
   });
   const input = request();
-  if (input.options)
-    input.options.topics = ["collaborators", "historicalContext", "places"];
+  if (input.options) input.options.topics = ["collaborators", "historicalContext", "places"];
   const job = await startCapsule(input);
   for (let attempt = 0; attempt < 200 && job.status !== "failed"; attempt++)
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -186,10 +167,7 @@ test("photo review overlaps two batches and cannot approve photos from another b
     ],
   };
   for (const image of images)
-    await fs.writeFile(
-      path.join(directory, `${image.file}.image`),
-      Buffer.from([0xff, 0xd8, 0xff, 0xd9])
-    );
+    await fs.writeFile(path.join(directory, `${image.file}.image`), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   let active = 0;
   let peak = 0;
   let calls = 0;
@@ -200,10 +178,7 @@ test("photo review overlaps two batches and cannot approve photos from another b
     expect(body).not.toHaveProperty("reasoning");
     const ids = body.input[0].content
       .filter((part) => part.type === "input_text")
-      .map(
-        (part) =>
-          (JSON.parse(part.text ?? "{}") as { photoId?: string }).photoId
-      )
+      .map((part) => (JSON.parse(part.text ?? "{}") as { photoId?: string }).photoId)
       .filter(Boolean);
     calls++;
     peak = Math.max(peak, ++active);
@@ -220,8 +195,5 @@ test("photo review overlaps two batches and cannot approve photos from another b
   await reviewPhotographs(capsule);
   expect(calls).toBe(3);
   expect(peak).toBe(2);
-  expect(capsule.scenes[0].images?.map((image) => image.file)).toEqual([
-    images[0].file,
-    images[3].file,
-  ]);
+  expect(capsule.scenes[0].images?.map((image) => image.file)).toEqual([images[0].file, images[3].file]);
 });

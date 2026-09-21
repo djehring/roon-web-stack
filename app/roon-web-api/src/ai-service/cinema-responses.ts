@@ -13,10 +13,7 @@ interface ResponseStatus {
 }
 const contexts = new AsyncLocalStorage<ResponseContext>();
 
-export function withCinemaResponses<T>(
-  context: ResponseContext,
-  work: () => Promise<T>
-): Promise<T> {
+export function withCinemaResponses<T>(context: ResponseContext, work: () => Promise<T>): Promise<T> {
   let progress = Promise.resolve();
   return contexts.run(
     {
@@ -43,19 +40,14 @@ export async function cinemaResponse<T extends ResponseStatus>(
   const context = contexts.getStore();
   const payload = JSON.stringify(body);
   const hash = createHash("sha256").update(payload).digest("hex");
-  const file =
-    context &&
-    Array.isArray(body.tools) &&
-    path.join(context.directory, `${hash}.json`);
+  const file = context && Array.isArray(body.tools) && path.join(context.directory, `${hash}.json`);
   if (file) {
     const saved = await readCompleted<T>(file);
     if (saved) return saved;
   }
   let value: T;
   for (let attempt = 0; ; attempt++) {
-    await context?.progress(
-      attempt ? `${stage} — retrying a slow connection…` : `${stage}…`
-    );
+    await context?.progress(attempt ? `${stage} — retrying a slow connection…` : `${stage}…`);
     try {
       // Web research routinely runs longer than a short structured-output call.
       // Give it enough time on the first attempt to avoid paying for a restart.
@@ -71,9 +63,7 @@ export async function cinemaResponse<T extends ResponseStatus>(
   return value;
 }
 
-async function readCompleted<T extends ResponseStatus>(
-  file: string
-): Promise<T | undefined> {
+async function readCompleted<T extends ResponseStatus>(file: string): Promise<T | undefined> {
   try {
     const value = JSON.parse(await fs.readFile(file, "utf8")) as T;
     return value.status === "completed" ? value : undefined;
@@ -94,17 +84,11 @@ class ServiceError extends Error {
     readonly status: number,
     detail: string
   ) {
-    super(
-      `Research service returned HTTP ${status}${detail ? `: ${detail}` : ""}`
-    );
+    super(`Research service returned HTTP ${status}${detail ? `: ${detail}` : ""}`);
   }
 }
 
-async function request<T extends ResponseStatus>(
-  payload: string,
-  apiKey: string,
-  timeout: number
-): Promise<T> {
+async function request<T extends ResponseStatus>(payload: string, apiKey: string, timeout: number): Promise<T> {
   const result = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     signal: AbortSignal.timeout(timeout),
@@ -118,20 +102,15 @@ async function request<T extends ResponseStatus>(
     const failure = (await result.json().catch(() => ({}))) as {
       error?: { message?: string };
     };
-    throw new ServiceError(
-      result.status,
-      failure.error?.message?.slice(0, 400) ?? ""
-    );
+    throw new ServiceError(result.status, failure.error?.message?.slice(0, 400) ?? "");
   }
   const value = (await result.json()) as T;
-  if (value.status !== "completed")
-    throw new Error("Research did not complete.");
+  if (value.status !== "completed") throw new Error("Research did not complete.");
   return value;
 }
 
 function retryable(error: unknown): boolean {
-  if (error instanceof ServiceError)
-    return [408, 429, 500, 502, 503, 504].includes(error.status);
+  if (error instanceof ServiceError) return [408, 429, 500, 502, 503, 504].includes(error.status);
   return (
     ["TimeoutError", "AbortError"].includes(errorName(error)) ||
     (errorName(error) === "TypeError" && errorMessage(error) === "fetch failed")
@@ -140,28 +119,16 @@ function retryable(error: unknown): boolean {
 
 function describe(error: unknown, stage: string): Error {
   if (["TimeoutError", "AbortError"].includes(errorName(error))) {
-    return new Error(
-      `${stage} timed out after a retry. Retry picture update to continue from the saved research.`
-    );
+    return new Error(`${stage} timed out after a retry. Retry picture update to continue from the saved research.`);
   }
-  return error instanceof Error
-    ? error
-    : new Error(`${stage} failed. Please retry.`);
+  return error instanceof Error ? error : new Error(`${stage} failed. Please retry.`);
 }
 
 function errorName(error: unknown): string {
-  return error &&
-    typeof error === "object" &&
-    "name" in error &&
-    typeof error.name === "string"
-    ? error.name
-    : "";
+  return error && typeof error === "object" && "name" in error && typeof error.name === "string" ? error.name : "";
 }
 function errorMessage(error: unknown): string {
-  return error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
+  return error && typeof error === "object" && "message" in error && typeof error.message === "string"
     ? error.message
     : "";
 }

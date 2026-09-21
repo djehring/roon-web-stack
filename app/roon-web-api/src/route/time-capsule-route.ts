@@ -13,9 +13,12 @@ import {
   setZoneCapsule,
   startCapsule,
   updateCapsule,
+  updateCinemaContent,
   validateCapsuleRequest,
 } from "../ai-service/time-capsule";
 import { cinemaArtwork } from "../service/cinema-artwork";
+import { browseCinemaMusic, captureCinemaQueue, importCinemaMusic } from "../service/cinema-music";
+import { cinemaTrackLimit, validateMusicPath } from "../service/cinema-music-model";
 
 export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
   await server.register(
@@ -30,33 +33,72 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
         }
       });
       routes.get("/", async () => listCapsules());
-      routes.get("/capabilities", () => ({ optionsVersion: 2, managementVersion: 1 }));
-      routes.post<{ Body: { zoneId?: unknown; tracks?: unknown } | null }>(
-        "/artwork",
-        async (request, reply) => {
-          const { zoneId, tracks } = request.body ?? {};
-          if (
-            typeof zoneId !== "string" ||
-            !zoneId.trim() ||
-            zoneId.length > 300 ||
-            !Array.isArray(tracks)
-          ) {
-            return reply
-              .status(400)
-              .send({ error: "Provide a room and playlist tracks." });
-          }
+      routes.get("/capabilities", () => ({
+        optionsVersion: 2,
+        managementVersion: 1,
+        musicVersion: 1,
+        maxTracks: cinemaTrackLimit,
+      }));
+      for (const action of ["browse", "import"] as const) {
+        routes.post<{ Body: { path?: unknown; zoneId?: string } }>(`/music/${action}`, async (request, reply) => {
           try {
-            const input = validateCapsuleRequest({
-              query: "Artwork",
-              requestedAt: new Date().toISOString(),
-              tracks,
-            });
-            return { imageKey: await cinemaArtwork(zoneId, input.tracks) };
+            const path = validateMusicPath(request.body.path);
+            const zoneId = typeof request.body.zoneId === "string" ? request.body.zoneId : undefined;
+            return action === "browse"
+              ? await browseCinemaMusic(path, zoneId)
+              : { tracks: await importCinemaMusic(path, zoneId) };
           } catch (error) {
             return reply.status(400).send({ error: (error as Error).message });
           }
+        });
+      }
+      routes.post<{ Body: { zoneId?: string } }>("/music/queue", async (request, reply) => {
+        try {
+          if (typeof request.body.zoneId !== "string" || !request.body.zoneId.trim())
+            throw new Error("Choose a Roon room.");
+          return await captureCinemaQueue(request.body.zoneId);
+        } catch (error) {
+          return reply.status(400).send({ error: (error as Error).message });
         }
-      );
+      });
+      routes.put<{
+        Params: { id: string };
+        Body: { request?: unknown; baseRevision?: unknown; mutationId?: unknown } | null;
+      }>("/:id/content", async (request, reply) => {
+        try {
+          const body = request.body;
+          if (
+            !body ||
+            !Number.isInteger(body.baseRevision) ||
+            (body.baseRevision as number) < 0 ||
+            typeof body.mutationId !== "string" ||
+            !/^[a-zA-Z0-9-]{16,100}$/.test(body.mutationId)
+          ) {
+            throw new Error("Refresh Cinema before saving this item.");
+          }
+          const input = validateCapsuleRequest(body.request);
+          const job = await updateCinemaContent(request.params.id, input, body.baseRevision as number, body.mutationId);
+          return await (job ? reply.status(job.status === "ready" ? 200 : 202).send(job) : reply.status(404).send());
+        } catch (error) {
+          return reply.status(error instanceof CapsuleConflict ? 409 : 400).send({ error: (error as Error).message });
+        }
+      });
+      routes.post<{ Body: { zoneId?: unknown; tracks?: unknown } | null }>("/artwork", async (request, reply) => {
+        const { zoneId, tracks } = request.body ?? {};
+        if (typeof zoneId !== "string" || !zoneId.trim() || zoneId.length > 300 || !Array.isArray(tracks)) {
+          return reply.status(400).send({ error: "Provide a room and playlist tracks." });
+        }
+        try {
+          const input = validateCapsuleRequest({
+            query: "Artwork",
+            requestedAt: new Date().toISOString(),
+            tracks,
+          });
+          return { imageKey: await cinemaArtwork(zoneId, input.tracks) };
+        } catch (error) {
+          return reply.status(400).send({ error: (error as Error).message });
+        }
+      });
       routes.put<{ Params: { id: string }; Body: { options?: unknown } | null }>("/:id", async (request, reply) => {
         let options;
         try {
@@ -106,10 +148,13 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
           return reply.status(503).send({ error: (error as Error).message });
         }
       });
-      routes.get<{ Params: { id: string }; Querystring: { generation?: string } }>("/jobs/:id", async (request, reply) => {
-        const job = await capsuleJob(request.params.id, request.query.generation);
-        return job ? reply.send(job) : reply.status(404).send({ error: "Preparation not found. Please retry." });
-      });
+      routes.get<{ Params: { id: string }; Querystring: { generation?: string } }>(
+        "/jobs/:id",
+        async (request, reply) => {
+          const job = await capsuleJob(request.params.id, request.query.generation);
+          return job ? reply.send(job) : reply.status(404).send({ error: "Preparation not found. Please retry." });
+        }
+      );
       routes.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
         const capsule = await readCapsule(request.params.id);
         return capsule ? reply.send(capsule) : reply.status(404).send();

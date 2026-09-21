@@ -21,9 +21,7 @@ export async function mapCinemaWork<T, R>(
   };
   // Drain work already started before reporting failure, so it cannot publish
   // stale progress or checkpoints after a retry has begun.
-  await Promise.all(
-    Array.from({ length: Math.min(items.length, concurrency) }, worker)
-  );
+  await Promise.all(Array.from({ length: Math.min(items.length, concurrency) }, worker));
   if (failures.length) throw failures[0];
   return results;
 }

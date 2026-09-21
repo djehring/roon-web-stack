@@ -40,6 +40,7 @@ interface AISearchParam {
 }
 
 interface PlayTracksParam {
+  cinema?: boolean;
   zoneId: string;
   tracks: Track[];
 }
@@ -196,6 +197,12 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
     const { client, badRequestReply } = getClient(req, reply);
     if (client) {
       const { zoneId, tracks } = req.body;
+      if (req.body.cinema && tracks.length) {
+        const core = await roon.server();
+        const zone = core.services.RoonApiTransport.zone_by_zone_id(zoneId);
+        if (!zone) return reply.status(400).send({ error: "Choose an available room." });
+        await core.services.RoonApiTransport.change_settings(zone, { shuffle: false });
+      }
       const unfoundTracks = (await client.playTracks(zoneId, tracks)) as Track[];
       return reply.status(200).send(unfoundTracks);
     } else {
