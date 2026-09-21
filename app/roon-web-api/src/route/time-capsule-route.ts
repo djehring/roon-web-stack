@@ -2,6 +2,14 @@ import { FastifyInstance } from "fastify";
 import { clientManager } from "@service";
 import { validateCapsuleOptions } from "../ai-service/capsule-options";
 import {
+  deletePersonalCinema,
+  isPersonalCinema,
+  listPersonalCinemas,
+  readPersonalCinema,
+  savePersonalCinema,
+  uploadPersonalImage,
+} from "../ai-service/personal-cinema";
+import {
   CapsuleConflict,
   capsuleImage,
   capsuleImageContentType,
@@ -32,10 +40,45 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
           return reply.status(403).send();
         }
       });
-      routes.get("/", async () => listCapsules());
+      routes.addContentTypeParser(
+        "image/jpeg",
+        { parseAs: "buffer", bodyLimit: 12 * 1024 * 1024 },
+        (_request, body, done) => {
+          done(null, body);
+        }
+      );
+      routes.get("/", async () => {
+        const [generated, personal] = await Promise.all([listCapsules(), listPersonalCinemas()]);
+        return [...generated, ...personal].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      });
+      routes.put<{ Params: { file: string }; Body: Buffer }>(
+        "/personal/images/:file",
+        { bodyLimit: 12 * 1024 * 1024 },
+        async (request, reply) => {
+          try {
+            if (!Buffer.isBuffer(request.body)) throw new Error("Upload a Cinema JPEG.");
+            await uploadPersonalImage(request.params.file, request.body);
+            return await reply.status(204).send();
+          } catch (error) {
+            return reply.status(400).send({ error: (error as Error).message });
+          }
+        }
+      );
+      routes.put<{ Params: { id: string } }>(
+        "/personal/:id",
+        { bodyLimit: 2 * 1024 * 1024 },
+        async (request, reply) => {
+          try {
+            return await savePersonalCinema(request.params.id, request.body);
+          } catch (error) {
+            return reply.status(error instanceof CapsuleConflict ? 409 : 400).send({ error: (error as Error).message });
+          }
+        }
+      );
       routes.get("/capabilities", () => ({
         optionsVersion: 2,
         managementVersion: 1,
+        syncVersion: 1,
         musicVersion: 1,
         maxTracks: cinemaTrackLimit,
       }));
@@ -115,7 +158,8 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
       });
       routes.delete<{ Params: { id: string } }>("/:id", async (request, reply) => {
         try {
-          await deleteCapsule(request.params.id);
+          if (isPersonalCinema(request.params.id)) await deletePersonalCinema(request.params.id);
+          else await deleteCapsule(request.params.id);
           return await reply.status(204).send();
         } catch (error) {
           return reply.status(error instanceof CapsuleConflict ? 409 : 503).send({ error: (error as Error).message });
@@ -156,7 +200,9 @@ export async function registerTimeCapsuleRoutes(server: FastifyInstance) {
         }
       );
       routes.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
-        const capsule = await readCapsule(request.params.id);
+        const capsule = isPersonalCinema(request.params.id)
+          ? await readPersonalCinema(request.params.id)
+          : await readCapsule(request.params.id);
         return capsule ? reply.send(capsule) : reply.status(404).send();
       });
       routes.get<{ Params: { file: string } }>("/images/:file", async (request, reply) => {

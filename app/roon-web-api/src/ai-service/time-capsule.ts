@@ -221,8 +221,7 @@ export async function listCapsules(): Promise<TimeCapsule[]> {
   const capsules = await Promise.all(names.map((name) => readCapsule(name.slice(0, -5))));
   return capsules
     .filter((item): item is TimeCapsule => !!item)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50);
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function startCapsule(

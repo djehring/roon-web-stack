@@ -49,6 +49,7 @@ describe("Time Capsule routes", () => {
       expect((await app.inject("/paired/time-capsules/capabilities")).json()).toEqual({
         optionsVersion: 2,
         managementVersion: 1,
+        syncVersion: 1,
         musicVersion: 1,
         maxTracks: 1000,
       });
