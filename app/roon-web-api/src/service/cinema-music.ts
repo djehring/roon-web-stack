@@ -370,3 +370,25 @@ export async function findExactCinemaTrack(track: CapsuleTrack, zoneId: string):
     throw new Error("The original recording could not be identified. Replace this track in Edit → Music.");
   return matches[0].path;
 }
+
+/** Fresh isolated resolution before an explicit user-requested playback action. */
+export async function performMusicAction(path: CinemaMusicPath, zoneId: string, action: string): Promise<void> {
+  if (!["Play Now", "Play Next", "Queue"].includes(action)) throw new Error("Unsupported music action.");
+  const { browser, list, items } = await openRecording(path, zoneId);
+  let actions = items;
+  if (list.hint !== "action_list") {
+    const container = items.find(
+      (i) =>
+        ["Play Album", "Play Playlist", "Play Work", "Play Disc"].includes(i.title) && i.hint !== "action" && i.item_key
+    );
+    if (!container) throw new Error("Open a recording or album to play it.");
+    const opened = await bounded(roon.browse({ ...browser.options, item_key: container.item_key }));
+    if (opened.is_error || !opened.list) throw new Error(opened.message || "Playback actions are unavailable.");
+    actions = await browser.load(opened.list);
+  }
+  const names = action === "Play Next" ? ["Play Next", "Add Next"] : [action];
+  const selected = actions.find((i) => i.hint === "action" && names.includes(i.title) && i.item_key);
+  if (!selected) throw new Error(`“${action}” is unavailable for this music.`);
+  const result = await bounded(roon.browse({ ...browser.options, item_key: selected.item_key }));
+  if (result.is_error) throw new Error(result.message || "Roon could not complete this action.");
+}

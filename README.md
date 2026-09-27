@@ -333,3 +333,18 @@ Sorry if I forgot anyone, please don't argue on the order.
 - [GitHub](https://github.com), with a special thanks to everyone involved in the `actions` in used in this repo
 - [alpine](https://gitlab.alpinelinux.org/alpine/aports)
 - [linux and git](https://git.kernel.org)
+
+### Recently played for native clients
+
+The bridge records qualifying local-zone plays independently of connected apps.
+Paired clients can read `/api/:client_id/history/capabilities`, `/tracks` and
+`/albums`, and use read-only `/resolve` and `/browse` before explicit `/play`.
+History keeps up to 14 days and 10,000 plays, with a 16 MiB metadata ceiling.
+The default store is `config/playback-history.json` on the existing config volume;
+`HISTORY_FILE` can override its path. Artwork is referenced, not copied.
+
+Tracks qualify after 30 observed playing seconds or half their duration. Pauses,
+seeks, disconnected time and unknown-duration radio streams are excluded. This
+starts a new shared bridge history and cannot import Roon's previous profile
+history. History responses report connection and storage failures; existing
+clients continue to work without using these new endpoints.

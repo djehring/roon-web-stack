@@ -28,6 +28,7 @@ import {
   cleanupOldUnmatchedTracksData,
   getLatestUnmatchedTracks,
 } from "../service/unmatched-tracks-analyzer";
+import { registerHistoryRoutes } from "./history-route";
 import { registerTimeCapsuleRoutes } from "./time-capsule-route";
 
 interface ClientIdParam {
@@ -83,6 +84,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
   await server.register(FastifySSEPlugin);
   await server.register(fastifyMultipart as FastifyPluginCallback);
   await registerTimeCapsuleRoutes(server);
+  await registerHistoryRoutes(server);
   server.get("/version", (_: FastifyRequest, reply: FastifyReply) => {
     return reply.status(204).header("x-roon-web-stack-version", extension_version).send();
   });

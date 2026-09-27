@@ -1,6 +1,12 @@
 import { roon } from "@infrastructure";
 import type { RoonApiBrowseOptions } from "@model";
-import { browseCinemaMusic, captureCinemaQueue, importCinemaMusic, playLocatedCinemaTrack } from "./cinema-music";
+import {
+  browseCinemaMusic,
+  captureCinemaQueue,
+  importCinemaMusic,
+  performMusicAction,
+  playLocatedCinemaTrack,
+} from "./cinema-music";
 import { CinemaMusicPath, validateMusicPath } from "./cinema-music-model";
 
 jest.mock("@infrastructure", () => ({ roon: { browse: jest.fn(), load: jest.fn(), server: jest.fn() } }));
@@ -54,7 +60,7 @@ describe("Cinema music selections", () => {
                   hint: "action_list",
                 })),
               ]
-            : ["Play Now", "Queue", "Play From Here"].map((title) => ({ title, hint: "action", item_key: title }));
+            : ["Play Now", "Queue", "Add Next"].map((title) => ({ title, hint: "action", item_key: title }));
       return Promise.resolve({
         list: list(level),
         offset: options.offset,
@@ -87,6 +93,22 @@ describe("Cinema music selections", () => {
         },
       },
     } as never);
+  });
+
+  test("history playback resolves fresh keys and executes only the requested action in its own session", async () => {
+    await performMusicAction(path, "chosen-room", "Queue");
+    const calls = jest.mocked(roon.browse).mock.calls.map(([input]) => input as RoonApiBrowseOptions);
+    expect(calls.map((c) => c.item_key).filter(Boolean)).toEqual(["album", "play-album", "Queue"]);
+    expect(new Set(calls.map((c) => c.multi_session_key)).size).toBe(1);
+    expect(calls.every((c) => c.zone_or_output_id === "chosen-room")).toBe(true);
+    await expect(performMusicAction(path, "chosen-room", "Delete")).rejects.toThrow("Unsupported");
+  });
+
+  test("Play Next uses Roon's Add Next action when that is the offered label", async () => {
+    await performMusicAction(path, "chosen-room", "Play Next");
+    const last = jest.mocked(roon.browse).mock.calls.at(-1)?.[0] as RoonApiBrowseOptions;
+    expect(last.item_key).toBe("Add Next");
+    expect(last.zone_or_output_id).toBe("chosen-room");
   });
 
   test("imports all pages, preserves repeated recordings and never executes playback", async () => {

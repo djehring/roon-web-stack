@@ -7,6 +7,7 @@ import { buildLoggerOptions, hostInfo, logger, mdnsAdvertiser } from "@infrastru
 import { clientManager, gracefulShutdownHook, startScheduledTasks, stopScheduledTasks } from "@service";
 import apiRoute from "./route/api-route";
 import appRoute from "./route/app-route";
+import { startHistory, stopHistory } from "./service/history/service";
 
 // Load environment variables.
 //
@@ -103,6 +104,7 @@ const init = async (): Promise<void> => {
     gracefulShutDownHttp.setReady();
     gracefulShutDownHttps.setReady();
 
+    await startHistory();
     await clientManager.start();
 
     // Start scheduled tasks
@@ -111,10 +113,12 @@ const init = async (): Promise<void> => {
     // Register cleanup handler for scheduled tasks
     process.on("SIGINT", () => {
       stopScheduledTasks();
+      void stopHistory();
     });
 
     process.on("SIGTERM", () => {
       stopScheduledTasks();
+      void stopHistory();
     });
   } catch (err: unknown) {
     if (err instanceof Error) {
