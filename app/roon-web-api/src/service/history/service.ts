@@ -1,7 +1,7 @@
 import path from "node:path";
 import { roon } from "@infrastructure";
 import type { RoonServer } from "@model";
-import { albumId, HistoryEvent, order } from "./model";
+import { albumId, HistoryEvent, order, sharedCredits } from "./model";
 import { HistoryRecorder } from "./recorder";
 import { HistoryStore } from "./store";
 
@@ -45,7 +45,15 @@ export class HistoryService {
     let events = retained.filter((e) => (!room || e.zoneId === room) && e.qualifiedAt <= asOf).sort(order);
     if (kind === "albums") {
       const groups = new Map<string, HistoryEvent>();
-      for (const event of events) if (event.album && !groups.has(albumId(event))) groups.set(albumId(event), event);
+      for (const event of events) {
+        if (!event.album) continue;
+        const id = albumId(event);
+        const group = groups.get(id);
+        if (group) group.artist = sharedCredits(group.artist, event.artist);
+        // Keep the newest play as the representative; only the album response's
+        // display credits change. Stored tracks and their resolution hints stay intact.
+        else groups.set(id, { ...event });
+      }
       events = [...groups.values()];
     }
     if (after)

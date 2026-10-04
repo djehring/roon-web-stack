@@ -205,6 +205,96 @@ test("stable paging, album grouping, room filters and core isolation", () => {
   expect(() => service.page("tracks", { limit: "10000" })).toThrow();
 });
 
+test("saved album tracks with changing composer credits regroup without rewriting plays", async () => {
+  const plays = [
+    { ...event("blue-drag"), title: "Blue drag", artist: "Django Reinhardt / Josef Myrow" },
+    {
+      ...event("lady-be-good", -180000),
+      title: "Lady be good",
+      artist: "Django Reinhardt / Ira Gershwin / George Gershwin",
+    },
+    { ...event("dinah", -360000), title: "Dinah", artist: "Django Reinhardt / Duke Ellington" },
+  ].map((play) => ({ ...play, album: "The Quintessence", imageKey: "django-cover" }));
+  store.snapshot.events = plays;
+  await store.save();
+  const saved = await fs.readFile(store.file, "utf8");
+  const restored = new HistoryStore(store.file, () => now);
+  await restored.open();
+  const service = new HistoryService(restored);
+  service.recorder.coreId = "core";
+
+  const albums = service.page("albums", {}).items;
+  expect(albums).toHaveLength(1);
+  expect(albums[0]).toMatchObject({ ...plays[0], artist: "Django Reinhardt" });
+  const tracks = service.page("tracks", {}).items;
+  expect(tracks).toEqual(plays.map((play) => ({ ...play, albumId: albums[0].albumId })));
+  expect(new Set(tracks.map((play) => play.albumId))).toEqual(new Set([albums[0].albumId]));
+  expect(restored.snapshot.events).toEqual(plays);
+  expect(await fs.readFile(store.file, "utf8")).toBe(saved);
+  expect(service.event("blue-drag").artist).toBe("Django Reinhardt / Josef Myrow");
+});
+
+test("album hints distinguish titles, artwork and missing-artwork credits", () => {
+  const service = new HistoryService(store);
+  service.recorder.coreId = "core";
+  store.snapshot.events = [
+    { ...event("cover-one"), imageKey: "cover-one" },
+    { ...event("cover-two", -1000), imageKey: "cover-two" },
+    { ...event("other-title", -2000), album: "Other album", imageKey: "cover-one" },
+    event("no-cover-one", -3000),
+    { ...event("no-cover-two", -4000), artist: "Other artist" },
+    { ...event("no-album", -5000), album: "", imageKey: "cover-one" },
+    { ...event("other-core", -6000), coreId: "other-core", imageKey: "cover-one" },
+  ];
+  expect(service.page("albums", {}).items.map((play) => play.id)).toEqual([
+    "cover-one",
+    "cover-two",
+    "other-title",
+    "no-cover-one",
+    "no-cover-two",
+  ]);
+  expect(service.page("tracks", {}).items).toHaveLength(6);
+});
+
+test("regrouped albums keep newest ordering, room filters and stable pagination", () => {
+  const service = new HistoryService(store);
+  service.recorder.coreId = "core";
+  store.snapshot.events = [
+    { ...event("newest"), imageKey: "cover", artist: "Artist / Composer A" },
+    { ...event("other-album", -1000), album: "Other album", imageKey: "other-cover" },
+    { ...event("kitchen", -2000), imageKey: "cover", artist: "Artist / Composer B", zoneId: "kitchen" },
+    { ...event("oldest", -3000), imageKey: "cover", artist: "Artist" },
+  ];
+  const first = service.page("albums", { limit: "1" });
+  expect(first.items[0]).toMatchObject({ id: "newest", artist: "Artist" });
+  store.snapshot.events.push({
+    ...event("later"),
+    imageKey: "cover",
+    artist: "Unrelated credit",
+    qualifiedAt: new Date(Date.now() + 1000).toISOString(),
+  });
+  const second = service.page("albums", { limit: "1", cursor: first.nextCursor });
+  expect(second.items.map((play) => play.id)).toEqual(["other-album"]);
+  expect(second.nextCursor).toBeUndefined();
+  expect(service.page("albums", { roomId: "kitchen" }).items[0]).toMatchObject({
+    id: "kitchen",
+    artist: "Artist / Composer B",
+  });
+});
+
+test("album labels keep shared full credits and do not guess an artist for compilations", () => {
+  const service = new HistoryService(store);
+  service.recorder.coreId = "core";
+  store.snapshot.events = [
+    { ...event("one"), imageKey: "cover", artist: "AC/DC / Guest" },
+    { ...event("two", -1000), imageKey: "cover", artist: "ac/dc / Another Guest" },
+  ];
+  expect(service.page("albums", {}).items[0].artist).toBe("AC/DC");
+  store.snapshot.events.push({ ...event("three", -2000), imageKey: "cover", artist: "Different performer" });
+  expect(service.page("albums", {}).items[0].artist).toBe("");
+  expect(service.page("tracks", {}).items[0].artist).toBe("AC/DC / Guest");
+});
+
 test("normal seek subscription updates qualify without full zone snapshots", () => {
   recorder.receive("core", "Subscribed", { zones: [zone()] });
   for (let position = 1; position <= 30; position++) {

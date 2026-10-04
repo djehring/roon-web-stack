@@ -348,3 +348,25 @@ seeks, disconnected time and unknown-duration radio streams are excluded. This
 starts a new shared bridge history and cannot import Roon's previous profile
 history. History responses report connection and storage failures; existing
 clients continue to work without using these new endpoints.
+
+Recent albums are derived from retained plays, grouped by Core, normalized album
+title and artwork key. Changing track performers or composers does not split an
+album when its title and artwork match. Without artwork, grouping also requires
+matching display credits. Album cards show only credits shared by the grouped
+plays; the original track credits are preserved. These are provisional metadata
+hints, not verified edition IDs: different artwork stays separate, while editions
+sharing both title and artwork can group together. Existing saved plays are
+regrouped on reads without a history migration or an app update.
+
+Reopening history matches the saved title and uses artwork and artist credits to
+narrow results. If a displayed remaster suffix prevents Roon from finding the
+music, the bridge retries without that suffix in the search query while still
+requiring the original full title in the results. This avoids substituting a
+different remaster. Matching editions remain choices; title-only results from
+unrelated artists are not offered as the recorded play.
+
+History browsing skips redundant single-child rows that repeat the selected
+title, returning the playable path and its tracks. Lists with multiple recordings
+remain choices. Playback resolves the path afresh, including wrapper paths from
+older apps, and runs an action only after an explicit Play Now, Play Next or Queue
+request.

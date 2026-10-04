@@ -1,9 +1,9 @@
 import { FastifyInstance } from "fastify";
 import { clientManager } from "@service";
-import { browseCinemaMusic, performMusicAction } from "../service/cinema-music";
+import { performMusicAction } from "../service/cinema-music";
 import { validateMusicPath } from "../service/cinema-music-model";
 import { historyLimits } from "../service/history/model";
-import { resolveHistory } from "../service/history/resolve";
+import { browseHistoryMusic, resolveHistory } from "../service/history/resolve";
 import { HistoryService, historyService } from "../service/history/service";
 
 export async function registerHistoryRoutes(server: FastifyInstance, service: HistoryService = historyService()) {
@@ -45,7 +45,7 @@ export async function registerHistoryRoutes(server: FastifyInstance, service: Hi
         }
       );
       routes.post<{ Body: { path?: unknown; zoneId?: unknown } | null }>("/browse", async (request) => {
-        return await browseCinemaMusic(
+        return await browseHistoryMusic(
           validateMusicPath(request.body?.path),
           typeof request.body?.zoneId === "string" ? request.body.zoneId : undefined
         );
@@ -61,7 +61,11 @@ export async function registerHistoryRoutes(server: FastifyInstance, service: Hi
           !["Play Now", "Play Next", "Queue"].includes(body.action)
         )
           throw new Error("Choose a playback action and room.");
-        await performMusicAction(validateMusicPath(body.path), body.zoneId, body.action);
+        // Older installed clients may send the original wrapper path rather than
+        // the playable path returned by /browse. Resolve it afresh for both.
+        const page = await browseHistoryMusic(validateMusicPath(body.path), body.zoneId);
+        if (page.kind === "list") throw new Error("Choose a recording or album to play.");
+        await performMusicAction(page.path, body.zoneId, body.action);
         return { ok: true };
       });
       done();

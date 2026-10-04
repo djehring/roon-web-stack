@@ -34,8 +34,25 @@ export const displayText = (value: string) =>
 export const normalize = (text: string) => displayText(text).normalize("NFKC").trim().toLowerCase();
 export const albumId = (event: HistoryEvent) =>
   createHash("sha256")
-    .update(JSON.stringify([event.coreId, normalize(event.album), normalize(event.artist), event.imageKey ?? ""]))
+    .update(
+      JSON.stringify([
+        event.coreId,
+        normalize(event.album),
+        // Transport credits describe the track, so composers/guests must not split
+        // an album with matching title and artwork. Neither hint proves an edition.
+        event.imageKey ? ["artwork", event.imageKey] : ["credits", normalize(event.artist)],
+      ])
+    )
     .digest("hex");
+
+/** Shared display credits are a label, not a claim of verified album-artist identity. */
+export function sharedCredits(latest: string, earlier: string): string {
+  const credits = new Set(earlier.split(" / ").map(normalize));
+  return latest
+    .split(" / ")
+    .filter((credit) => credits.has(normalize(credit)))
+    .join(" / ");
+}
 export const order = (a: HistoryEvent, b: HistoryEvent) =>
   b.observedAt.localeCompare(a.observedAt) || b.id.localeCompare(a.id);
 export const text = (value: unknown, limit = 1000): string =>

@@ -55,7 +55,7 @@ test("history routes require pairing, validate input, resolve without playback a
         },
         {
           title: "Song",
-          subtitle: "Artist (live)",
+          subtitle: "Artist",
           kind: "track",
           path: { hierarchy: "search", steps: [{ title: "Song", index: 1 }] },
         },
@@ -74,13 +74,42 @@ test("history routes require pairing, validate input, resolve without playback a
     ).toBe(400);
     expect(performMusicAction).not.toHaveBeenCalled();
     const musicPath = { hierarchy: "albums", steps: [{ title: "Album", index: 0 }] };
+    const playablePath = { ...musicPath, steps: [...musicPath.steps, { title: "Album", index: 0 }] };
+    jest
+      .mocked(browseCinemaMusic)
+      .mockResolvedValueOnce({
+        title: "Album",
+        kind: "list",
+        path: { hierarchy: "albums", steps: musicPath.steps },
+        items: [{ title: "Album", kind: "list", path: { hierarchy: "albums", steps: playablePath.steps } }],
+      })
+      .mockResolvedValueOnce({
+        title: "Album",
+        kind: "album",
+        path: { hierarchy: "albums", steps: playablePath.steps },
+        items: [],
+      });
     const played = await app.inject({
       method: "POST",
       url: "/paired/history/play",
       payload: { path: musicPath, action: "Queue", zoneId: "destination" },
     });
     expect(played.statusCode).toBe(200);
-    expect(performMusicAction).toHaveBeenCalledWith(musicPath, "destination", "Queue");
+    expect(performMusicAction).toHaveBeenCalledWith(playablePath, "destination", "Queue");
+    jest.mocked(performMusicAction).mockClear();
+    jest.mocked(browseCinemaMusic).mockResolvedValue({
+      title: "Album",
+      kind: "list",
+      path: { hierarchy: "albums", steps: musicPath.steps },
+      items: [],
+    });
+    const unavailable = await app.inject({
+      method: "POST",
+      url: "/paired/history/play",
+      payload: { path: musicPath, action: "Play Now", zoneId: "destination" },
+    });
+    expect(unavailable.statusCode).toBe(400);
+    expect(performMusicAction).not.toHaveBeenCalled();
   } finally {
     await app.close();
     await service.store.save();
