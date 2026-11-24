@@ -164,18 +164,9 @@ export const scrapeUKChartData = async (date: string): Promise<Track[]> => {
 
     logger.debug(`Fetching chart data from: ${url}`);
 
-    // Set headers to mimic a browser and include cookies to bypass consent
-    const headers = {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Connection": "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Cache-Control": "max-age=0",
-      "Cookie":
-        "euconsent-v2=CPzXLQAPzXLQAAHABBENC4CsAP_AAH_AAAAAIltf_X__b3_j-_5_f_t0eY1P9_7_v-0zjhfdt-8N3f_X_L8X42M7vF36pq4KuR4Eu3LBIQdlHOHcTUmw6okVrzPsbk2cr7NKJ7PEmnMbO2dYGH9_n93TuZKY7______z_v-v_v____f_7-3_3__5_3---_e_V_99zLv9____39nP___9v-_9_____4IhgEmGpeQBdiWODJtGlUKIEYVhIdAKACigGFoisIHVwU7K4CfUELABCagJwIgQYgowYBAAIJAEhEQEgB4IBEARAIAAQAqQEIACNgEFgBYGAQACgGhYgRQBCBIQZHBUcpgQFSLRQT2ViCUHexphCGWeBFAo_oqEBGs0QLAyEhYOY4AkBLxZIHmKF8gAAAAA.YAAAAAAAAAAA; CookieConsent={stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27explicit%27%2Cver:1%2Cutc:1710172800000%2Cregion:%27gb%27}; newsletterPopup=true; subscribePopup=true",
-    };
+    // Identify the bridge plainly. The site refuses (403) the imitation browser
+    // headers and consent cookie this request used to send.
+    const headers = { "User-Agent": "roon-web-api chart lookup", "Accept": "text/html" };
 
     // Fetch HTML from the website with a timeout and headers
     const response = await axios.get<string>(url, {

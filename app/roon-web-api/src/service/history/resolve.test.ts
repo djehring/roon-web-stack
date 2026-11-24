@@ -3,7 +3,11 @@ import { CinemaMusicPath } from "../cinema-music-model";
 import { HistoryEvent } from "./model";
 import { browseHistoryMusic, resolveHistory } from "./resolve";
 
-jest.mock("../cinema-music", () => ({ browseCinemaMusic: jest.fn(), performMusicAction: jest.fn() }));
+jest.mock("../cinema-music", () => ({
+  browseCinemaMusic: jest.fn(),
+  performMusicAction: jest.fn(),
+  trackTitle: (title: string) => title.replace(/^(?:\d+[.-]|\d+-\d+)\s+/, ""),
+}));
 
 const title = "David Jehring - AI Compilation";
 const path: CinemaMusicPath = {
@@ -97,22 +101,57 @@ describe("finding a recorded play", () => {
     path: { hierarchy: "search", steps: [] },
   });
 
-  function results(kind: "Albums" | "Tracks", queries: Record<string, CinemaMusicItem[]>) {
+  /** Roon's search categories, plus the track listing each album opens to. */
+  interface Catalogue {
+    albums?: Record<string, CinemaMusicItem[]>;
+    tracks?: Record<string, CinemaMusicItem[]>;
+    contents?: Record<string, CinemaMusicItem[]>;
+  }
+
+  function results(catalogue: Catalogue) {
+    const listed = (entries: CinemaMusicItem[], from: CinemaMusicPath) =>
+      entries.map((entry, index) => ({
+        ...entry,
+        path: { ...from, steps: [...from.steps, { title: entry.title, index }] },
+      }));
     jest.mocked(browseCinemaMusic).mockImplementation((path) => {
-      const categoryPath: CinemaMusicPath = { ...path, steps: [{ title: kind, index: 1 }] };
+      const [category, chosen] = path.steps;
+      if (path.steps.length === 0) {
+        // Roon leads its search page with a top result, then the category rows.
+        return Promise.resolve({
+          title: "Search",
+          kind: "list",
+          path,
+          items: [
+            { ...item(event.album, event.artist, event.imageKey), kind: "track" as const },
+            ...(["Albums", "Tracks"] as const)
+              .filter((name) => catalogue[name.toLowerCase() as "albums" | "tracks"])
+              .map((name, offset) => ({
+                title: name,
+                subtitle: "2 Results",
+                kind: "list" as const,
+                path: { ...path, steps: [{ title: name, index: offset + 1 }] },
+              })),
+          ],
+        });
+      }
+      if (path.steps.length === 1) {
+        const queries = catalogue[category.title.toLowerCase() as "albums" | "tracks"] ?? {};
+        return Promise.resolve({
+          title: category.title,
+          kind: "list",
+          path,
+          items: listed(queries[path.query ?? ""] ?? [], path),
+        });
+      }
       return Promise.resolve({
-        title: path.steps.length ? kind : "Search",
-        kind: "list",
+        title: chosen.title,
+        kind: "album",
         path,
-        items: path.steps.length
-          ? (queries[path.query ?? ""] ?? []).map((entry, index) => ({
-              ...entry,
-              path: { ...path, steps: [...path.steps, { title: entry.title, index }] },
-            }))
-          : [
-              { ...item(event.album, event.artist, event.imageKey), kind: "track" },
-              { title: kind, subtitle: "2 Results", kind: "list", path: categoryPath },
-            ],
+        items: listed(
+          (catalogue.contents?.[chosen.title] ?? []).map((entry) => ({ ...entry, kind: "track" as const })),
+          path
+        ),
       });
     });
   }
@@ -123,13 +162,15 @@ describe("finding a recorded play", () => {
   });
 
   test("finds Young Americans with a shorter query while preserving the exact remaster and browse path", async () => {
-    results("Albums", {
-      [event.album]: [item("American Wayfarer (2016 Remaster)", "Burl Ives")],
-      "Young Americans": [
-        item(event.album, "[[314746|David Bowie]]", event.imageKey),
-        item("Young Americans", "Durand Jones & The Indications", "other-cover"),
-        item("Young Americans (1999 Remaster)", "David Bowie", event.imageKey),
-      ],
+    results({
+      albums: {
+        [event.album]: [item("American Wayfarer (2016 Remaster)", "Burl Ives")],
+        "Young Americans": [
+          item(event.album, "[[314746|David Bowie]]", event.imageKey),
+          item("Young Americans", "Durand Jones & The Indications", "other-cover"),
+          item("Young Americans (1999 Remaster)", "David Bowie", event.imageKey),
+        ],
+      },
     });
     const resolution = await resolveHistory(event, "albums", "kitchen");
     expect(resolution.choices).toHaveLength(1);
@@ -148,36 +189,111 @@ describe("finding a recorded play", () => {
     expect(jest.mocked(browseCinemaMusic).mock.calls.every((call) => call[1] === "kitchen")).toBe(true);
   });
 
-  test("does not broaden a successful search and excludes other artists' same-title tracks", async () => {
-    results("Tracks", {
-      [event.title]: [
-        item(event.title, "David Bowie, Luther Vandross", event.imageKey),
-        item(event.title, "Another Artist", "another-cover"),
-        item(event.title, "Another Artist", event.imageKey),
-      ],
+  test.each([
+    ["alongside its credits", "David Bowie Young Americans (2016 Remaster)"],
+    ["under its leading credit alone", "David Bowie"],
+  ])("finds an album Roon only returns %s", async (_description, query) => {
+    results({
+      albums: {
+        [query]: [
+          item(event.album, "[[314746|David Bowie]]", event.imageKey),
+          item("Station to Station", "David Bowie", "other-cover"),
+        ],
+      },
+    });
+    const resolution = await resolveHistory(event, "albums");
+    expect(resolution.choices).toHaveLength(1);
+    expect(resolution.choices[0].path.query).toBe(query);
+  });
+
+  test("opens the recorded album and offers the track it actually lists", async () => {
+    results({
+      albums: { [event.album]: [item(event.album, "[[314746|David Bowie]]", event.imageKey)] },
+      contents: { [event.album]: [item("5. Somebody Up There Likes Me", ""), item(`6. ${event.title}`, "")] },
+    });
+    const resolution = await resolveHistory(event, "tracks", "kitchen");
+    expect(resolution.choices).toHaveLength(1);
+    expect(resolution.choices[0]).toMatchObject({ title: `6. ${event.title}`, kind: "track" });
+    // Two browses to find the album, one to open it. The search index is not consulted.
+    expect(browseCinemaMusic).toHaveBeenCalledTimes(3);
+    expect(jest.mocked(browseCinemaMusic).mock.calls.every((call) => call[1] === "kitchen")).toBe(true);
+  });
+
+  test("offers every identically titled recording the album lists, with its position", async () => {
+    results({
+      albums: { [event.album]: [item(event.album, "David Bowie", event.imageKey)] },
+      contents: { [event.album]: [item("2. Nursery Suite", ""), item("3. Nursery Suite", "")] },
+    });
+    const resolution = await resolveHistory({ ...event, title: "Nursery Suite" }, "tracks");
+    expect(resolution.choices.map((choice) => choice.title)).toEqual(["2. Nursery Suite", "3. Nursery Suite"]);
+  });
+
+  test("reads a track position spanning several discs", async () => {
+    results({
+      albums: { [event.album]: [item(event.album, "David Bowie", event.imageKey)] },
+      contents: { [event.album]: [item("1-4 1984", ""), item(`2-7 ${event.title}`, "")] },
+    });
+    const resolution = await resolveHistory(event, "tracks");
+    expect(resolution.choices.map((choice) => choice.title)).toEqual([`2-7 ${event.title}`]);
+  });
+
+  test("does not read a leading number in the title itself as a position", async () => {
+    results({
+      albums: { [event.album]: [item(event.album, "David Bowie", event.imageKey)] },
+      contents: { [event.album]: [item("1984", ""), item("3. 1984", "")] },
+      tracks: {},
+    });
+    const resolution = await resolveHistory({ ...event, title: "1984" }, "tracks");
+    expect(resolution.choices.map((choice) => choice.title)).toEqual(["1984", "3. 1984"]);
+  });
+
+  test("searches for the recording when the recorded album cannot be identified", async () => {
+    results({
+      albums: {},
+      tracks: {
+        [event.title]: [
+          item(event.title, "David Bowie, Luther Vandross", event.imageKey),
+          item(event.title, "Another Artist", "another-cover"),
+          item(event.title, "Another Artist", event.imageKey),
+        ],
+      },
     });
     const resolution = await resolveHistory(event, "tracks");
     expect(resolution.choices.map((choice) => choice.subtitle)).toEqual(["David Bowie, Luther Vandross"]);
-    expect(browseCinemaMusic).toHaveBeenCalledTimes(2);
+  });
+
+  test("points at the album when it is found but does not list the recording", async () => {
+    results({
+      albums: { [event.album]: [item(event.album, "David Bowie", event.imageKey)] },
+      contents: { [event.album]: [item("1. Young Americans", "")] },
+      tracks: {},
+    });
+    const resolution = await resolveHistory(event, "tracks");
+    expect(resolution.choices).toEqual([]);
+    expect(resolution.message).toBe("This recording could not be found in Roon. Its album is listed under Albums.");
   });
 
   test("keeps ambiguous same-artist editions when artwork is unavailable", async () => {
-    results("Tracks", {
-      [event.title]: [
-        item(event.title, "David Bowie", "edition-one"),
-        item(event.title, "David Bowie", "edition-two"),
-        item(event.title, "Other David Bowie Band", "unrelated"),
-      ],
+    results({
+      tracks: {
+        [event.title]: [
+          item(event.title, "David Bowie", "edition-one"),
+          item(event.title, "David Bowie", "edition-two"),
+          item(event.title, "Other David Bowie Band", "unrelated"),
+        ],
+      },
     });
     expect((await resolveHistory({ ...event, imageKey: undefined }, "tracks")).choices).toHaveLength(2);
   });
 
   test("matches all transport credits against linked browse credits with different separators", async () => {
-    results("Tracks", {
-      [event.title]: [
-        item(event.title, "[[1|David Bowie]], [[2|Luther Vandross]]"),
-        item(event.title, "[[2|Luther Vandross]]"),
-      ],
+    results({
+      tracks: {
+        [event.title]: [
+          item(event.title, "[[1|David Bowie]], [[2|Luther Vandross]]"),
+          item(event.title, "[[2|Luther Vandross]]"),
+        ],
+      },
     });
     const resolution = await resolveHistory({ ...event, artist: "David Bowie / Luther Vandross" }, "tracks");
     expect(resolution.choices).toHaveLength(1);
@@ -185,16 +301,18 @@ describe("finding a recorded play", () => {
   });
 
   test("album artwork supports compilations whose album artist differs from the recorded performer", async () => {
-    results("Albums", { [event.album]: [item(event.album, "Various Artists", event.imageKey)] });
+    results({ albums: { [event.album]: [item(event.album, "Various Artists", event.imageKey)] } });
     expect((await resolveHistory(event, "albums")).choices).toHaveLength(1);
   });
 
   test("does not substitute another remaster or another artist when the original cannot be found", async () => {
-    results("Albums", {
-      "Young Americans": [
-        item("Young Americans (1999 Remaster)", event.artist, event.imageKey),
-        item(event.album, "Another Artist", "another-cover"),
-      ],
+    results({
+      albums: {
+        "Young Americans": [
+          item("Young Americans (1999 Remaster)", event.artist, event.imageKey),
+          item(event.album, "Another Artist", "another-cover"),
+        ],
+      },
     });
     expect((await resolveHistory(event, "albums")).choices).toEqual([]);
   });
@@ -212,7 +330,7 @@ describe("finding a recorded play", () => {
   test.each(["Fascination (Remastered 2017)", "Fascination [2016 Remaster]"])(
     "also retries a remastered track query: %s",
     async (title) => {
-      results("Tracks", { Fascination: [item(title, event.artist, event.imageKey)] });
+      results({ tracks: { Fascination: [item(title, event.artist, event.imageKey)] } });
       const resolution = await resolveHistory({ ...event, title }, "tracks");
       expect(resolution.choices).toHaveLength(1);
       expect(resolution.choices[0].path.query).toBe("Fascination");
@@ -220,8 +338,9 @@ describe("finding a recorded play", () => {
   );
 
   test("does not remove meaningful parenthesized title text or retry an unchanged query", async () => {
-    results("Tracks", {});
-    expect((await resolveHistory({ ...event, title: "Heroes (Live)" }, "tracks")).choices).toEqual([]);
+    results({ tracks: {} });
+    const played = { ...event, album: "", title: "Heroes (Live)" };
+    expect((await resolveHistory(played, "tracks")).choices).toEqual([]);
     expect(browseCinemaMusic).toHaveBeenCalledTimes(2);
     expect(jest.mocked(browseCinemaMusic).mock.calls.every(([path]) => path.query === "Heroes (Live)")).toBe(true);
   });

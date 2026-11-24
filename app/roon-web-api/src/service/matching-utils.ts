@@ -6,15 +6,22 @@ import { normalizeArtistName, normalizeString } from "./string-utils";
 export function matchesArtist(requested: string, listed?: string): boolean {
   if (!requested || !listed) return false;
   const plain = (value: string) => value.replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1");
-  const artist = normalizeArtistName(plain(requested));
+  const normalized = (value: string) => normalizeArtistName(plain(value)).replace(/\b(sir|dame)\s+/g, "");
+  const artist = normalized(requested);
   if (!artist) return false;
-  if (normalizeArtistName(plain(listed)) === artist) return true;
+  if (normalized(listed) === artist) return true;
 
   // Roon supplies individual linked credits for collaborations. Decode them before
   // normalizing: normalizeString removes square-bracketed text entirely.
   const links = [...listed.matchAll(/\[\[[^|\]]+\|([^\]]+)\]\]/g)].map((match) => match[1]);
   const credits = links.length ? links : listed.split(/\s*(?:,|&|;|\bfeat\.?|\bfeaturing|\band\b)\s*/i);
-  return credits.some((credit) => normalizeArtistName(credit) === artist);
+  const requestedCredits = plain(requested)
+    .split(/\s*(?:,|&|;|\bfeat\.?|\bfeaturing|\band\b)\s*/i)
+    .filter(Boolean);
+  return (
+    requestedCredits.length > 0 &&
+    requestedCredits.every((wanted) => credits.some((credit) => normalized(credit) === normalized(wanted)))
+  );
 }
 
 export function matchesTrackTitle(requested: string, listed: string): boolean {
@@ -52,5 +59,12 @@ function albumTitlesMatch(itemTitle: string, album: string): boolean {
   const normalizedAlbum = normalizeString(album);
   if (!normalizedTitle || !normalizedAlbum) return false;
   if (normalizedTitle === normalizedAlbum) return true;
+  const words = (value: string) =>
+    value
+      .split(" ")
+      .filter((word) => word !== "and" && word !== "the")
+      .sort()
+      .join(" ");
+  if (words(normalizedTitle) === words(normalizedAlbum)) return true;
   return normalizedAlbum.endsWith(normalizedTitle) || normalizedTitle.endsWith(normalizedAlbum);
 }

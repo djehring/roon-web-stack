@@ -12,7 +12,8 @@ const controlRow = (item: Item) =>
   item.hint === "header" ||
   /^(play (album|playlist|work|disc|all)|shuffle( all)?|add (album|playlist|work|disc))$/i.test(item.title);
 const resultCount = (value: string) => /^\d+[\d,]*\s+(results?|items?|tracks?|albums?)$/i.test(value.trim());
-const trackTitle = (title: string) => title.replace(/^\d+[.-]\s+/, "");
+/** Roon prefixes a listed track with its position: "7. " on one disc, "2-7 " across several. */
+export const trackTitle = (title: string) => title.replace(/^(?:\d+[.-]|\d+-\d+)\s+/, "");
 
 async function bounded<T>(work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -129,7 +130,7 @@ function childPath(path: CinemaMusicPath, item: Item, index: number): CinemaMusi
   return { ...path, steps: [...path.steps, step] };
 }
 
-/** Roon sometimes puts a single recording inside a second, identically named list. */
+/** Roon wraps tracks and albums in identically named catalogue/version lists. */
 async function openRecording(path: CinemaMusicPath, zoneId?: string) {
   let browser = new MusicBrowser(path, zoneId);
   let opened = await browser.open();
@@ -140,7 +141,7 @@ async function openRecording(path: CinemaMusicPath, zoneId?: string) {
     const single = candidates.length === 1 ? candidates[0] : undefined;
     if (
       !single ||
-      single.item.hint !== "action_list" ||
+      !["action_list", "list"].includes(single.item.hint ?? "") ||
       normalize(single.item.title) !== normalize(path.steps.at(-1)?.title ?? "")
     )
       break;
