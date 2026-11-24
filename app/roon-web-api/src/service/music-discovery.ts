@@ -8,6 +8,7 @@ import {
   researchReleases,
 } from "../ai-service/discovery-ai";
 import { Track } from "../ai-service/types/track";
+import { catalogueReleaseDates } from "./catalogue-release-dates";
 import {
   browseCinemaMusic,
   CinemaMusicItem,
@@ -57,6 +58,8 @@ interface SearchDependencies {
   contents: typeof importCinemaMusic;
   /** The published chart for the week containing a YYYY-MM-DD date, in chart order. */
   chart: (date: string) => Promise<Track[]>;
+  /** Release dates from the music catalogue alone, which answers in about a second. */
+  dates: typeof catalogueReleaseDates;
 }
 const dependencies: SearchDependencies = {
   interpret: interpretDiscovery,
@@ -64,6 +67,7 @@ const dependencies: SearchDependencies = {
   browse: browseCinemaMusic,
   contents: importCinemaMusic,
   chart: (date) => scrapeUKChartData(date.replace(/-/g, "")),
+  dates: catalogueReleaseDates,
 };
 const cache = new Map<string, { client: string; expires: number; result: DiscoveryResult }>();
 const busyRooms = new Set<string>();
@@ -232,6 +236,142 @@ async function resolveAlbum(
   };
 }
 
+const FILLER = new Set(["by", "the", "and", "a", "an"]);
+const namedWords = (value: string) =>
+  musicWords(value)
+    .split(" ")
+    .filter((word) => word && !FILLER.has(word))
+    .sort()
+    .join(" ");
+/** Edition notes such as (MFiT Version) are not part of the name someone asks for. */
+const baseTitle = (title: string) => title.replace(/\s*[([][^)\]]*[)\]]/g, "").trim() || title;
+const itemCredits = (item: CinemaMusicItem) =>
+  plainCredit(item.subtitle ?? "")
+    .split(/\s*(?:,|\/|&|;)\s*/)
+    .filter(Boolean);
+
+/**
+ * A request that is exactly a title plus one of its credited artists, such as
+ * Old Sock by Eric Clapton, names that item outright. Returns that artist.
+ */
+function namedWithArtist(query: string, item: CinemaMusicItem): string | undefined {
+  if (DECORATED.test(item.title) && !DECORATED.test(query)) return;
+  const title = namedWords(baseTitle(item.title));
+  if (!title) return;
+  return itemCredits(item).find((credit) => {
+    const artist = namedWords(credit);
+    return !!artist && namedWords(`${title} ${artist}`) === namedWords(query);
+  });
+}
+/** A request that is exactly a title, such as Rockferry. Only Roon's own top result may claim it. */
+function namedByTitle(query: string, item: CinemaMusicItem): string | undefined {
+  if (DECORATED.test(item.title) && !DECORATED.test(query)) return;
+  return namedWords(baseTitle(item.title)) === namedWords(query) ? itemCredits(item)[0] : undefined;
+}
+
+function applyReleases(results: DiscoveryResult[], releases: ReleaseEvidence[]) {
+  for (const result of results) {
+    const release = releaseFor(result.album, result.artist, releases);
+    // Metadata can shortlist an album before its contents are loaded. Preserve
+    // only the year if the eventual track count differs from the dated edition.
+    result.release =
+      release && result.kind === "album" && release.trackCount && release.trackCount !== result.tracks.length
+        ? { ...release, releaseDate: release.releaseDate.slice(0, 4) }
+        : release;
+  }
+}
+
+const NAMED_ALBUM: DiscoveryIntent = {
+  kind: "albums",
+  mode: "albums",
+  terms: [],
+  composer: "",
+  work: "",
+  workScope: "none",
+  workAliases: [],
+  movement: "",
+  movementCount: 0,
+  performers: [],
+  recent: false,
+  limit: 3,
+  tracks: [],
+};
+
+/**
+ * Roon's own search answers in a second or two, so music named outright is
+ * returned from it without waiting for interpretation or web research.
+ */
+async function namedMusic(
+  query: string,
+  mode: DiscoveryMode,
+  deps: SearchDependencies
+): Promise<DiscoveryResponse | undefined> {
+  // Roon matches every word, so a connecting "by" hides the album it would otherwise find.
+  const search = query
+    .replace(/\bby\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!search) return;
+  const page = await deps.browse({ hierarchy: "search", query: search, steps: [] });
+  const group = async (name: string) => {
+    const list = page.items.find((item) => item.title === name && item.kind === "list");
+    return list ? (await deps.browse(list.path)).items : [];
+  };
+  const [albumItems, trackItems] = await Promise.all([
+    mode === "tracks" ? [] : group("Albums"),
+    mode === "albums" ? [] : group("Tracks"),
+  ]);
+  const same = (left: CinemaMusicItem) => (right: CinemaMusicItem) =>
+    left.title === right.title && plainCredit(left.subtitle ?? "") === plainCredit(right.subtitle ?? "");
+  // Roon lists its best match first, above the groups. It is an album or a track
+  // only if the matching group lists it too; an artist or composer is neither.
+  const top = page.items.at(0);
+  const topAlbum = top && albumItems.find(same(top));
+  const topTrack = top && !topAlbum ? trackItems.find(same(top)) : undefined;
+  const named = (item: CinemaMusicItem) => namedWithArtist(query, item) ?? namedByTitle(query, item);
+
+  let album = topAlbum && named(topAlbum) ? topAlbum : undefined;
+  let track = topTrack && named(topTrack) ? topTrack : undefined;
+  if (!album && !track) {
+    // Below the top result only a title with its artist is specific enough, and
+    // a title shared by an album and its title track needs interpretation to choose.
+    album = albumItems.find((item) => item.kind === "list" && namedWithArtist(query, item));
+    track = trackItems.find((item) => item.kind === "track" && namedWithArtist(query, item));
+    if (album && track) return;
+  }
+  if (track) {
+    const artist = named(track) ?? namedWithArtist(query, track) ?? "";
+    const result = await resolveTrack({ track: baseTitle(track.title), artist, album: "" }, deps);
+    if (result.available) return { mode: "tracks", query, message: "Found in Roon by name.", results: [result] };
+    return;
+  }
+  if (!album) return;
+  const chosen = album;
+  const artist = named(chosen) ?? namedWithArtist(query, chosen) ?? "";
+  const editions = [
+    chosen,
+    ...albumItems.filter(
+      (item) =>
+        item !== chosen &&
+        item.kind === "list" &&
+        namedWords(baseTitle(item.title)) === namedWords(baseTitle(chosen.title)) &&
+        matchesArtist(artist, item.subtitle) &&
+        (!DECORATED.test(item.title) || DECORATED.test(query))
+    ),
+  ].slice(0, NAMED_ALBUM.limit);
+  // Editions load in their own browse sessions, so a few can load at once.
+  const loaded = await Promise.all(
+    editions.map((item) => resolveAlbum(item, NAMED_ALBUM, deps).catch(() => undefined))
+  );
+  const results = loaded.filter((result) => result !== undefined);
+  if (!results.length) return;
+  const releases = await deps
+    .dates(results.map((result) => ({ title: result.album, artist: result.artist, trackCount: result.tracks.length })))
+    .catch(() => []);
+  applyReleases(results, releases);
+  return { mode: "albums", query, message: "Found in Roon by name.", results };
+}
+
 function compareReleases(a?: ReleaseEvidence, b?: ReleaseEvidence): number {
   const rank = (release?: ReleaseEvidence) => (!release ? 2 : release.reissue ? 1 : 0);
   return rank(a) - rank(b) || (b?.releaseDate ?? "").localeCompare(a?.releaseDate ?? "");
@@ -239,7 +379,7 @@ function compareReleases(a?: ReleaseEvidence, b?: ReleaseEvidence): number {
 
 async function selectAlbums(items: CinemaMusicItem[], intent: DiscoveryIntent, deps: SearchDependencies) {
   const results: DiscoveryResult[] = [];
-  const batchSize = intent.recent ? 3 : 1;
+  const batchSize = 3;
   const pool = intent.recent ? items.slice(0, Math.max(20, intent.limit * 3)) : items;
   let checked = 0;
   for (let index = 0; index < pool.length && results.length < intent.limit; index += batchSize) {
@@ -274,7 +414,15 @@ export async function discoverMusic(
   deps = dependencies
 ): Promise<DiscoveryResponse> {
   const started = Date.now();
-  const intent = await deps.interpret(query, mode);
+  // Interpretation starts at once, so a request Roon cannot answer by name loses no time.
+  const interpreting = deps.interpret(query, mode);
+  interpreting.catch(() => undefined);
+  const named = await namedMusic(query, mode, deps).catch(() => undefined);
+  if (named) {
+    reportStage("named", started, { query, mode: named.mode, results: named.results.length });
+    return named;
+  }
+  const intent = await interpreting;
   reportStage("interpret", started, { query, kind: intent.kind, recent: intent.recent });
   let researchFailed = false;
   let releases: ReleaseEvidence[] | undefined;
@@ -348,20 +496,16 @@ export async function discoverMusic(
       ).values(),
     ];
     try {
-      releases = await deps.research(query, candidates, { recent: intent.recent });
+      // Only a latest search needs every date, to rank by. Web research can take
+      // a minute or more, so other searches show the dates the catalogue has.
+      releases = intent.recent
+        ? await deps.research(query, candidates, { recent: true })
+        : await deps.dates(candidates);
     } catch {
       researchFailed = true;
     }
   }
-  for (const result of results) {
-    const release = releaseFor(result.album, result.artist, releases ?? []);
-    // Metadata can shortlist an album before its contents are loaded. Preserve
-    // only the year if the eventual track count differs from the dated edition.
-    result.release =
-      release && result.kind === "album" && release.trackCount && release.trackCount !== result.tracks.length
-        ? { ...release, releaseDate: release.releaseDate.slice(0, 4) }
-        : release;
-  }
+  applyReleases(results, releases ?? []);
   if (intent.recent) results.sort((a, b) => compareReleases(a.release, b.release));
   const unique = new Map(
     results.map((result) => [JSON.stringify(result.path ?? result.title + result.artist), result])
@@ -380,11 +524,6 @@ export async function discoverMusic(
       researchFailed || !results.some((item) => item.release)
         ? " Release dates could not be verified; these results are not ranked as the latest."
         : " Newest verified releases first; known reissues and albums with unknown dates follow. Availability is limited to your Roon catalogue.";
-  else if (intent.mode === "albums" && results.some((item) => !item.release))
-    message +=
-      researchFailed || !results.some((item) => item.release)
-        ? " Release dates could not be verified."
-        : " Some release dates could not be verified.";
   if (intent.chart) {
     const week = new Date(`${intent.chart.date}T00:00:00Z`).toLocaleDateString("en-GB", {
       day: "numeric",

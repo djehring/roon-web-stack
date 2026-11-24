@@ -86,6 +86,7 @@ function setup(changes: Partial<DiscoveryIntent> = {}) {
     browse,
     contents,
     chart: jest.fn<Promise<Track[]>, [string]>().mockResolvedValue([]),
+    dates: jest.fn().mockResolvedValue([release]),
   };
 }
 
@@ -367,7 +368,9 @@ test("chart entries prefer the original recording and accept the lead artist of 
     ])
   );
   const response = await discoverMusic("uk top two this week in 1985", "auto", deps);
-  expect(deps.browse.mock.calls[0][0]).toMatchObject({ query: "THE POWER OF LOVE JENNIFER RUSH" });
+  // The request itself is tried in Roon first; the chart lookups follow.
+  const lookups = deps.browse.mock.calls.map(([request]) => request.query).filter((query) => !query?.startsWith("uk"));
+  expect(lookups[0]).toBe("THE POWER OF LOVE JENNIFER RUSH");
   expect(response.results.map((result) => [result.title, result.artist])).toEqual([
     ["The Power of Love", "Jennifer Rush, Gunther Mende"],
     ["Separate Lives (2016 Remaster)", "Phil Collins, Stephen Bishop"],
@@ -378,7 +381,129 @@ test("a chart that cannot be loaded fails explicitly instead of guessing the hit
   const deps = chartSetup();
   deps.chart.mockResolvedValue([]);
   await expect(discoverMusic("uk top ten this week in 1985", "auto", deps)).rejects.toThrow("could not be loaded");
-  expect(deps.browse).not.toHaveBeenCalled();
+  expect(deps.browse.mock.calls.every(([request]) => request.query === "uk top ten this week in 1985")).toBe(true);
+});
+
+type Listed = { title: string; subtitle: string };
+/** Roon's search page: its best match first, then the groups that list everything. */
+function namedSetup(albums: Listed[], songs: Listed[] = [], top: Listed | undefined = albums.at(0) ?? songs.at(0)) {
+  const deps = setup({ kind: "albums", terms: ["Eric Clapton"], composer: "", work: "", workScope: "none" });
+  const listed = (items: Listed[], kind: "list" | "track") =>
+    items.map((item, index) => ({
+      ...item,
+      kind,
+      path: { hierarchy: "search" as const, query: "q", steps: [{ title: item.title, index }] },
+    }));
+  deps.browse.mockImplementation((request) => {
+    const group = request.steps[0]?.title;
+    const items =
+      group === "Albums"
+        ? listed(albums, "list")
+        : group === "Tracks"
+          ? listed(songs, "track")
+          : [
+              ...(top ? listed([top], songs.includes(top) ? "track" : "list") : []),
+              ...(albums.length ? listed([{ title: "Albums", subtitle: `${albums.length} Results` }], "list") : []),
+              ...(songs.length ? listed([{ title: "Tracks", subtitle: `${songs.length} Results` }], "list") : []),
+            ];
+    return Promise.resolve({ title: "Search", kind: "list", path, items });
+  });
+  deps.contents.mockImplementation((itemPath) =>
+    Promise.resolve(
+      songs.some((song) => song.title === itemPath.steps[0].title)
+        ? [{ track: itemPath.steps[0].title, artist: "Bill Evans", album: "Everybody Digs", roonPath: itemPath }]
+        : [1, 2].map((index) => ({
+            track: `Song ${index}`,
+            artist: "Eric Clapton",
+            album: itemPath.steps[0].title,
+            roonPath: { ...itemPath, steps: [...itemPath.steps, { title: `Song ${index}`, index }] },
+          }))
+    )
+  );
+  deps.interpret.mockReturnValue(new Promise(() => undefined));
+  return deps;
+}
+const oldSock = [
+  { title: "Old Sock (MFiT Version)", subtitle: "Eric Clapton" },
+  { title: "Old Socks, New Shoes...", subtitle: "[[1|The Jazz Crusaders]]" },
+  { title: "Old Sock", subtitle: "[[2|Bishopskin]]" },
+];
+
+test.each(["Old Sock by Eric Clapton", "Old Sock", "old sock eric clapton"])(
+  "%s is returned from Roon without interpretation or web research",
+  async (query) => {
+    const deps = namedSetup(oldSock);
+    deps.dates.mockResolvedValue([{ ...release, title: "Old Sock (MFiT Version)", artist: "Eric Clapton" }]);
+    const response = await discoverMusic(query, "auto", deps);
+    expect(response).toMatchObject({ mode: "albums", message: "Found in Roon by name." });
+    // Another artist's album of the same name is not an edition of this one.
+    expect(response.results).toHaveLength(1);
+    expect(response.results[0]).toMatchObject({
+      kind: "album",
+      title: "Old Sock (MFiT Version)",
+      artist: "Eric Clapton",
+      available: true,
+      release: { releaseDate: "2019-08-30" },
+    });
+    expect(response.results[0].tracks).toHaveLength(2);
+    expect(deps.research).not.toHaveBeenCalled();
+    // Roon matches every word, so the connecting "by" is left out of its search.
+    expect(deps.browse.mock.calls[0][0].query).not.toMatch(/\bby\b/i);
+  }
+);
+
+test("editions of the named album by the same artist are returned together", async () => {
+  const deps = namedSetup([
+    { title: "Kind of Blue", subtitle: "Miles Davis" },
+    { title: "Kind of Blue (The Mono Recordings)", subtitle: "[[1|Miles Davis]]" },
+    { title: "Kind of Blue", subtitle: "[[2|Piano Miles]]" },
+    { title: "Kind of Blue (Live)", subtitle: "[[1|Miles Davis]]" },
+  ]);
+  const response = await discoverMusic("Kind of Blue", "auto", deps);
+  expect(response.results.map((result) => result.title)).toEqual([
+    "Kind of Blue",
+    "Kind of Blue (The Mono Recordings)",
+  ]);
+});
+
+test("a title shared by an album and a song follows Roon's own top result", async () => {
+  const albums = [{ title: "Peace Piece", subtitle: "[[1|Bill Evans]]" }];
+  const songs = [{ title: "Peace Piece", subtitle: "Bill Evans, Bill Evans Trio" }];
+  const song = await discoverMusic("Peace Piece by Bill Evans", "auto", namedSetup(albums, songs, songs[0]));
+  expect(song).toMatchObject({ mode: "tracks", message: "Found in Roon by name." });
+  expect(song.results).toMatchObject([{ kind: "track", title: "Peace Piece", available: true }]);
+  const album = await discoverMusic("Peace Piece", "auto", namedSetup(albums, songs, albums[0]));
+  expect(album).toMatchObject({ mode: "albums", message: "Found in Roon by name." });
+  // An explicit mode overrides the top result when the title is named with its artist.
+  const asked = await discoverMusic("Peace Piece by Bill Evans", "albums", namedSetup(albums, songs, songs[0]));
+  expect(asked).toMatchObject({ mode: "albums", message: "Found in Roon by name." });
+});
+
+test.each([
+  ["an artist, even with a self-titled album", "Eric Clapton", { title: "Eric Clapton", subtitle: "7 Albums" }],
+  ["a request with further words", "latest Old Sock by Eric Clapton", undefined],
+  ["a bare title that is not Roon's top result", "Old Sock", { title: "Socks", subtitle: "[[3|Someone]]" }],
+  ["a work whose top result is a longer title", "Enigma Variations", undefined],
+])("%s is left to interpretation", async (_, query, top) => {
+  const deps = namedSetup(
+    [
+      { title: "Old Sock", subtitle: "Eric Clapton" },
+      { title: "Eric Clapton", subtitle: "Eric Clapton" },
+      { title: "Elgar: Enigma Variations", subtitle: "Leonard Bernstein" },
+    ],
+    [],
+    top ?? { title: "Elgar: Enigma Variations", subtitle: "Leonard Bernstein" }
+  );
+  deps.interpret.mockResolvedValue({ ...intent, kind: "albums", terms: ["x"], work: "", workScope: "none" });
+  const response = await discoverMusic(query, "auto", deps);
+  expect(response.message).not.toBe("Found in Roon by name.");
+});
+
+test("a karaoke version is never taken for the named album", async () => {
+  const deps = namedSetup([{ title: "Rockferry (Karaoke Version Originally Performed by Duffy)", subtitle: "Duffy" }]);
+  deps.interpret.mockResolvedValue({ ...intent, kind: "albums", terms: ["x"], work: "", workScope: "none" });
+  const response = await discoverMusic("Rockferry by Duffy", "auto", deps);
+  expect(response.message).not.toBe("Found in Roon by name.");
 });
 
 test("rejects excerpts and the wrong named performer", async () => {
@@ -389,14 +514,14 @@ test("rejects excerpts and the wrong named performer", async () => {
   expect((await discoverMusic("Rattle Enigma", "auto", setup({ performers: ["Simon Rattle"] }))).results).toEqual([]);
 });
 
-test.each(["auto", "albums"] as const)("%s album searches look up dates without a recency request", async (mode) => {
+test.each(["auto", "albums"] as const)("%s album searches take dates from the catalogue alone", async (mode) => {
   const deps = setup({ recent: false });
   const response = await discoverMusic("Enigma Variations", mode, deps);
-  expect(deps.research).toHaveBeenCalledWith(
-    "Enigma Variations",
-    [{ title, artist: "Royal Liverpool Philharmonic Orchestra, Vasily Petrenko", trackCount: 19 }],
-    { recent: false }
-  );
+  expect(deps.dates).toHaveBeenCalledWith([
+    { title, artist: "Royal Liverpool Philharmonic Orchestra, Vasily Petrenko", trackCount: 19 },
+  ]);
+  // Web research can take a minute or more; only a latest search waits for it.
+  expect(deps.research).not.toHaveBeenCalled();
   expect(response.results[0].release).toEqual(release);
   expect(response.message).toBe("Albums containing the complete Enigma Variations.");
   expect(performMusicAction).not.toHaveBeenCalled();
@@ -426,7 +551,7 @@ test.each([false, true])("date lookup sorts only when recency is requested (%s)"
       },
     ])
   );
-  deps.research.mockResolvedValue(
+  const dated = jest.fn().mockResolvedValue(
     albums.slice(0, 3).map((title, index) => ({
       ...release,
       title,
@@ -435,26 +560,27 @@ test.each([false, true])("date lookup sorts only when recency is requested (%s)"
       reissue: index === 2,
     }))
   );
+  deps.research = dated;
+  deps.dates = dated;
   const response = await discoverMusic(recent ? "latest Milos albums" : "Milos Karadaglic", "albums", deps);
   expect(response.results.map((item) => item.title)).toEqual(
     recent ? ["Newer album", "Older album", "Reissue", "Unknown date"] : albums
   );
   expect(response.results.filter((item) => item.release)).toHaveLength(3);
-  expect(response.message).toContain(
-    recent ? "Newest verified releases first" : "Some release dates could not be verified."
-  );
+  // A missing date is simply not shown; only a latest search explains its ranking.
+  if (recent) expect(response.message).toContain("Newest verified releases first");
+  else expect(response.message).toBe("Albums verified in Roon.");
 });
 
-test.each(["failed", "empty"])("album date research that is %s preserves playable results", async (outcome) => {
+test.each(["failed", "empty"])("an album date lookup that is %s preserves playable results", async (outcome) => {
   const deps = setup();
-  if (outcome === "failed") deps.research.mockRejectedValue(new Error("research offline"));
-  else deps.research.mockResolvedValue([]);
+  if (outcome === "failed") deps.dates.mockRejectedValue(new Error("catalogue offline"));
+  else deps.dates.mockResolvedValue([]);
   const response = await discoverMusic("Enigma Variations", "albums", deps);
   expect(response.results).toHaveLength(1);
   expect(response.results[0]).toMatchObject({ available: true, tracks });
   expect(response.results[0].release).toBeUndefined();
-  expect(response.message).toContain("Release dates could not be verified.");
-  expect(response.message).not.toContain("latest");
+  expect(response.message).toBe("Albums containing the complete Enigma Variations.");
 });
 
 test("research failures preserve recency intent and explain unverified dates", async () => {
