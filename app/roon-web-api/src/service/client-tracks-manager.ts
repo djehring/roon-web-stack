@@ -301,7 +301,9 @@ async function queueSingleTrack(
       }
       await executeAction(actionListItem, track, browseOptions);
     } else if (queueItem.hint === "action") {
-      await executeAction(queueItem, track, browseOptions);
+      const action = findPlayAction(loadResponse.items, startPlay);
+      if (!action) throw new Error(`No playback action for: ${track.title}`);
+      await executeAction(action, track, browseOptions);
     } else {
       throw new Error(`Unsupported item hint for playback. ID: ${track.itemKey}`);
     }
@@ -359,13 +361,7 @@ async function handleActionList(
 
     // Ensure we're getting the correct action based on startPlay
     // Usually: items[0] = Play Now, items[1] = Play Next, items[2] = Add to Queue
-    const actionIndex = startPlay ? 0 : 2;
-    if (actionIndex >= actionListLoad.items.length) {
-      logger.error(`Required action index ${actionIndex} not available for: ${track.title}`);
-      return null;
-    }
-
-    return actionListLoad.items[actionIndex];
+    return findPlayAction(actionListLoad.items, startPlay) ?? null;
   } catch (error) {
     logger.error(`Error in handleActionList for ${track.title}: ${JSON.stringify(error)}`);
     return null;
@@ -373,12 +369,13 @@ async function handleActionList(
 }
 
 async function executeAction(queueItem: Item, track: TrackToPlay, browseOptions: RoonApiBrowseOptions): Promise<void> {
-  await roon.browse({
+  const result = await roon.browse({
     hierarchy: "search",
     item_key: queueItem.item_key,
     multi_session_key: browseOptions.multi_session_key,
     zone_or_output_id: track.zoneId,
   });
+  if (result.is_error) throw new Error(result.message || "Roon could not play this recording.");
   logger.debug(`Queuing track: ${track.title} by ${track.artist}`);
 }
 
@@ -751,7 +748,7 @@ async function playAlbumTrack(
 }
 
 function findPlayAction(items: Item[], startPlay: boolean): Item | undefined {
-  const wanted = startPlay ? /play\s*now/i : /^queue$/i;
+  const wanted = startPlay ? /^play\s*now$/i : /^(queue|add to queue)$/i;
   return items.find((item) => item.hint === "action" && wanted.test(item.title));
 }
 

@@ -21,6 +21,7 @@ import {
   streamTrackStory,
   transcribeAudio,
 } from "../ai-service/chatgpt";
+import { interpretMusicRequest } from "../ai-service/music-request";
 import { Track, TrackStory } from "../ai-service/types/track";
 import { playItemByKey, searchAlbumsInLibrary } from "../service/roon-utils";
 import {
@@ -28,6 +29,7 @@ import {
   cleanupOldUnmatchedTracksData,
   getLatestUnmatchedTracks,
 } from "../service/unmatched-tracks-analyzer";
+import { registerDiscoveryRoutes } from "./discovery-route";
 import { registerHistoryRoutes } from "./history-route";
 import { registerTimeCapsuleRoutes } from "./time-capsule-route";
 
@@ -84,6 +86,7 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
   await server.register(FastifySSEPlugin);
   await server.register(fastifyMultipart as FastifyPluginCallback);
   await registerTimeCapsuleRoutes(server);
+  registerDiscoveryRoutes(server);
   await registerHistoryRoutes(server);
   server.get("/version", (_: FastifyRequest, reply: FastifyReply) => {
     return reply.status(204).header("x-roon-web-stack-version", extension_version).send();
@@ -143,6 +146,29 @@ const apiRoute: FastifyPluginAsync = async (server: FastifyInstance): Promise<vo
       return badRequestReply;
     }
   });
+  server.post<{ Params: ClientIdParam; Body: { text?: string; rooms?: string[] } }>(
+    "/:client_id/music-request",
+    async (req, reply) => {
+      const { client, badRequestReply } = getClient(req, reply);
+      if (!client) {
+        return badRequestReply;
+      }
+      const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+      const rooms = Array.isArray(req.body.rooms) ? req.body.rooms.filter((room) => typeof room === "string") : [];
+      if (!text) {
+        return reply.status(400).send({ error: "Say what to play." });
+      }
+      try {
+        return await reply.status(200).send(await interpretMusicRequest(text, rooms));
+      } catch (error: unknown) {
+        if (isMissingOpenAIKeyError(error)) {
+          return await reply.status(503).send({ error: error.message });
+        }
+        logger.error(error, "Error interpreting music request.");
+        return reply.status(500).send({ error: "Error interpreting music request." });
+      }
+    }
+  );
   server.post<{ Params: { client_id: string }; Body: Track }>("/:client_id/trackstory", async (req, reply) => {
     const { client, badRequestReply } = getClient(req, reply);
     if (client) {
