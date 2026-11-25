@@ -157,6 +157,7 @@ A chart that is not the UK singles chart, or a whole year or decade of hits with
 Respect the explicit tracks/albums mode: albums mode means albums, or classical with mode albums; tracks mode means tracks, chart, or classical with mode tracks. A chart is always tracks.
 
 # chart
+- Only the UK Official Singles Chart is available. Billboard, the Hot 100, American or any other country's chart, album charts and genre charts are never chart: answer them as tracks from your own knowledge.
 - date is a day inside the requested chart week as YYYY-MM-DD, resolved against the supplied today. This week in 1985 means today's month and day in 1985. A month without a day means the 15th of that month. Christmas means 25 December.
 - count is the number of chart positions requested: top ten is 10, top 40 is 40, number one is 1. Default 10, max 40.
 
@@ -175,7 +176,7 @@ Respect the explicit tracks/albums mode: albums mode means albums, or classical 
 
 # tracks
 - A single song or standalone instrumental (such as Bill Evans's Peace Piece) is tracks, never classical. Do not route ordinary song titles through classical work search.
-- tracks contains up to limit suggestions from your own knowledge and is never empty when the request names or describes music. They must preserve requested artists/recordings, but are only candidates for catalogue verification.
+- tracks contains up to limit suggestions from your own knowledge and is never empty when the request names or describes music. Every suggestion has a real song title. For an artist's songs, with no song named, list their best-known songs by title. They must preserve requested artists/recordings, but are only candidates for catalogue verification.
 - For a specifically named single song return one candidate and limit 1, unless the user asks for versions, alternatives or multiple songs. Do not add live versions to a request for just one track.
 
 # all kinds except chart
@@ -210,7 +211,8 @@ export async function interpretDiscovery(
     performers: request.performers ?? [],
     recent: request.recent ?? false,
     limit: Math.min(20, Math.max(1, request.limit || 10)),
-    tracks: request.tracks ?? [],
+    // A suggestion without a title cannot be looked up.
+    tracks: (request.tracks ?? []).filter((track) => track.track.trim()),
   };
   if (value.kind === "chart") {
     const date = request.date ?? "";

@@ -56,6 +56,12 @@ const golden: [string, Partial<DiscoveryIntent>][] = [
     );
     expect(["tracks", "declined"]).toContain(kind);
   });
+  // An artist's songs must come back as titled suggestions, not the artist alone.
+  test.concurrent.each(["songs by Duffy", "Molly Tuttle songs", "Nick Drake songs"])("%s", async (query) => {
+    const intent = await interpretDiscovery(query, "auto", today);
+    expect(intent.kind).toBe("tracks");
+    expect(intent.tracks.length).toBeGreaterThan(2);
+  });
   // The chart page is scraped, so its markup is the part most likely to change.
   test("the chart source still publishes the week of 24 November 1985", async () => {
     const chart = await scrapeUKChartData("19851124");
